@@ -4,7 +4,7 @@ Authentication router for the FastAPI application.
 This module provides API endpoints for authentication.
 """
 
-from datetime import timedelta
+from datetime import timedelta, datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -46,11 +46,11 @@ async def login_for_access_token(
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     # Update last login time
-    user.last_login = timedelta.now()
+    user.last_login = datetime.now()
     db.commit()
-    
+
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.username, "role": user.role},

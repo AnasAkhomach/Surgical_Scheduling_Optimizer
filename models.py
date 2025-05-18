@@ -11,9 +11,7 @@ from sqlalchemy import (
     Enum as GenericEnum,  # Changed from MySQLEnum
 )
 from sqlalchemy.orm import relationship
-from sqlalchemy.orm import declarative_base
-
-Base = declarative_base()
+from db_config import Base
 
 
 class OperatingRoom(Base):

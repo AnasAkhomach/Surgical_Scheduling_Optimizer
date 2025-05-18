@@ -8,16 +8,19 @@ import staff from './modules/staff'
 import appointments from './modules/appointments'
 import schedule from './modules/schedule'
 import users from './modules/users'
+import notifications from './modules/notifications'
 
 export default createStore({
   state: {
     loading: false,
-    error: null
+    error: null,
+    webSocketConnected: false
   },
   getters: {
     isLoading: state => state.loading,
     hasError: state => !!state.error,
-    errorMessage: state => state.error
+    errorMessage: state => state.error,
+    isWebSocketConnected: state => state.webSocketConnected
   },
   mutations: {
     SET_LOADING(state, loading) {
@@ -28,6 +31,9 @@ export default createStore({
     },
     CLEAR_ERROR(state) {
       state.error = null
+    },
+    SET_WEBSOCKET_CONNECTED(state, connected) {
+      state.webSocketConnected = connected
     }
   },
   actions: {
@@ -39,6 +45,9 @@ export default createStore({
     },
     clearError({ commit }) {
       commit('CLEAR_ERROR')
+    },
+    setWebSocketConnected({ commit }, connected) {
+      commit('SET_WEBSOCKET_CONNECTED', connected)
     }
   },
   modules: {
@@ -50,6 +59,7 @@ export default createStore({
     staff,
     appointments,
     schedule,
-    users
+    users,
+    notifications
   }
 })

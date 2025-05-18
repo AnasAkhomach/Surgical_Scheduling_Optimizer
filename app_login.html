@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Surgery Scheduler - Login</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/primevue@3.26.1/resources/themes/saga-blue/theme.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/primevue@3.26.1/resources/primevue.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/primeicons@6.0.1/primeicons.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/primeflex@3.3.0/primeflex.min.css">
+    <style>
+        body {
+            font-family: var(--font-family);
+            margin: 0;
+            padding: 0;
+            background-color: var(--surface-ground);
+            color: var(--text-color);
+        }
+        .login-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .login-card {
+            width: 100%;
+            max-width: 400px;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 1px -1px rgba(0,0,0,.2), 0 1px 1px 0 rgba(0,0,0,.14), 0 1px 3px 0 rgba(0,0,0,.12);
+            background-color: var(--surface-card);
+        }
+        .login-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .login-header h1 {
+            margin: 0;
+            color: var(--primary-color);
+        }
+        .login-header p {
+            margin: 0.5rem 0 0 0;
+            color: var(--text-color-secondary);
+        }
+        .form-field {
+            margin-bottom: 1.5rem;
+        }
+        .form-field label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        .form-field input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--surface-border);
+            border-radius: 4px;
+            background-color: var(--surface-card);
+            color: var(--text-color);
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .form-field input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 1px var(--primary-color);
+        }
+        .login-button {
+            width: 100%;
+            padding: 0.75rem;
+            background-color: var(--primary-color);
+            color: var(--primary-color-text);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+        .login-button:hover {
+            background-color: var(--primary-600);
+        }
+        .login-button:disabled {
+            background-color: var(--surface-400);
+            cursor: not-allowed;
+        }
+        .error-message {
+            color: var(--red-500);
+            margin-top: 1rem;
+            text-align: center;
+        }
+        .credentials-info {
+            margin-top: 2rem;
+            padding: 1rem;
+            background-color: var(--surface-hover);
+            border-radius: 4px;
+        }
+        .credentials-info h3 {
+            margin-top: 0;
+            color: var(--primary-color);
+        }
+        .credentials-info ul {
+            margin-bottom: 0;
+            padding-left: 1.5rem;
+        }
+        .loading-spinner {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid var(--primary-color-text);
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 1s linear infinite;
+            margin-right: 0.5rem;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <h1>Surgery Scheduler</h1>
+                <p>Please log in to continue</p>
+            </div>
+            
+            <div class="form-field">
+                <label for="username">Username</label>
+                <input type="text" id="username" placeholder="Enter your username">
+            </div>
+            
+            <div class="form-field">
+                <label for="password">Password</label>
+                <input type="password" id="password" placeholder="Enter your password">
+            </div>
+            
+            <button id="loginButton" class="login-button">Log In</button>
+            
+            <div id="errorMessage" class="error-message" style="display: none;"></div>
+            
+            <div class="credentials-info">
+                <h3>Test Credentials</h3>
+                <ul>
+                    <li><strong>Admin:</strong> username=admin, password=admin123</li>
+                    <li><strong>User:</strong> username=user, password=user123</li>
+                    <li><strong>Surgeon:</strong> username=surgeon, password=surgeon123</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const loginButton = document.getElementById('loginButton');
+            const usernameInput = document.getElementById('username');
+            const passwordInput = document.getElementById('password');
+            const errorMessage = document.getElementById('errorMessage');
+            
+            loginButton.addEventListener('click', async function() {
+                // Validate inputs
+                if (!usernameInput.value || !passwordInput.value) {
+                    errorMessage.textContent = 'Please enter both username and password';
+                    errorMessage.style.display = 'block';
+                    return;
+                }
+                
+                // Show loading state
+                loginButton.disabled = true;
+                loginButton.innerHTML = '<span class="loading-spinner"></span> Logging in...';
+                errorMessage.style.display = 'none';
+                
+                try {
+                    // Create form data
+                    const formData = new FormData();
+                    formData.append('username', usernameInput.value);
+                    formData.append('password', passwordInput.value);
+                    
+                    // Make the login request
+                    const response = await fetch('http://127.0.0.1:8000/api/auth/token', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        // Login successful
+                        localStorage.setItem('token', data.access_token);
+                        localStorage.setItem('token_type', data.token_type);
+                        
+                        // Get user info
+                        const userResponse = await fetch('http://127.0.0.1:8000/api/users/me', {
+                            headers: {
+                                'Authorization': `Bearer ${data.access_token}`
+                            }
+                        });
+                        
+                        if (userResponse.ok) {
+                            const userData = await userResponse.json();
+                            localStorage.setItem('user', JSON.stringify(userData));
+                            
+                            // Redirect to dashboard
+                            window.location.href = 'app_dashboard.html';
+                        } else {
+                            throw new Error('Failed to get user information');
+                        }
+                    } else {
+                        // Login failed
+                        errorMessage.textContent = data.detail || 'Login failed. Please check your credentials.';
+                        errorMessage.style.display = 'block';
+                        loginButton.disabled = false;
+                        loginButton.textContent = 'Log In';
+                    }
+                } catch (error) {
+                    errorMessage.textContent = error.message || 'An error occurred. Please try again.';
+                    errorMessage.style.display = 'block';
+                    loginButton.disabled = false;
+                    loginButton.textContent = 'Log In';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

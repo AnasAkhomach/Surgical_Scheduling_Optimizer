@@ -28,6 +28,30 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/schedule-gantt',
+    name: 'ScheduleGantt',
+    component: () => import('../views/ScheduleGantt.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/surgeon-availability',
+    name: 'SurgeonAvailability',
+    component: () => import('../views/SurgeonAvailability.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/room-availability',
+    name: 'RoomAvailability',
+    component: () => import('../views/RoomAvailability.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/reports',
+    name: 'Reports',
+    component: () => import('../views/Reports.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/operating-rooms',
     name: 'OperatingRooms',
     component: () => import('../views/OperatingRooms.vue'),
@@ -79,7 +103,7 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   const isAuthenticated = store.getters['auth/isAuthenticated']
   const isAdmin = store.getters['auth/isAdmin']
-  
+
   if (to.matched.some(record => record.meta.requiresAuth)) {
     if (!isAuthenticated) {
       next({ name: 'Login' })
