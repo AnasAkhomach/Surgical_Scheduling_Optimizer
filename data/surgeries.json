@@ -1,0 +1,37 @@
+[
+  {
+    "surgery_id": 1,
+    "surgery_type_id": 1,
+    "duration_minutes": 120,
+    "surgeon_id": 1,
+    "urgency_level": "High"
+  },
+  {
+    "surgery_id": 2,
+    "surgery_type_id": 2,
+    "duration_minutes": 90,
+    "surgeon_id": 2,
+    "urgency_level": "Medium"
+  },
+  {
+    "surgery_id": 3,
+    "surgery_type_id": 3,
+    "duration_minutes": 180,
+    "surgeon_id": 1,
+    "urgency_level": "High"
+  },
+  {
+    "surgery_id": 4,
+    "surgery_type_id": 1,
+    "duration_minutes": 60,
+    "surgeon_id": 3,
+    "urgency_level": "Low"
+  },
+  {
+    "surgery_id": 5,
+    "surgery_type_id": 2,
+    "duration_minutes": 150,
+    "surgeon_id": 2,
+    "urgency_level": "Medium"
+  }
+]

@@ -1,310 +1,500 @@
+"""
+Tabu Search optimizer for surgery scheduling.
+
+This module provides a comprehensive Tabu Search optimizer that works with the full models
+and uses components for feasibility checking, neighborhood generation, and solution evaluation.
+"""
+
 import logging
-from datetime import datetime, timedelta
-from scheduler_utils import SchedulerUtils, DatetimeWrapper
 import random
+import copy
+import time
+from datetime import datetime, timedelta
+from typing import List, Dict, Any, Optional, Tuple, Union
+
+from models import (
+    Surgery,
+    OperatingRoom,
+    Surgeon,
+    SurgeryRoomAssignment
+)
+from feasibility_checker import FeasibilityChecker
+from neighborhood_strategies import NeighborhoodStrategies
+from solution_evaluator import SolutionEvaluator
 
 logger = logging.getLogger(__name__)
+
+class TabuList:
+    """
+    Tabu list for the Tabu Search algorithm.
+
+    This class maintains a list of tabu moves and their tenures.
+    """
+
+    def __init__(self, default_tenure=10, min_tenure=None, max_tenure=None):
+        """
+        Initialize the tabu list.
+
+        Args:
+            default_tenure: Default tenure for tabu moves
+            min_tenure: Minimum tenure for tabu moves (for randomized tenures)
+            max_tenure: Maximum tenure for tabu moves (for randomized tenures)
+        """
+        self.tabu_items = {}  # Dictionary of tabu moves and their remaining tenures
+        self.default_tenure = default_tenure
+        self.min_tenure = min_tenure if min_tenure is not None else max(1, default_tenure // 2)
+        self.max_tenure = max_tenure if max_tenure is not None else default_tenure
+
+    def add(self, move, tenure=None):
+        """
+        Add a move to the tabu list.
+
+        Args:
+            move: The move to add (must be hashable)
+            tenure: Optional specific tenure for this move
+        """
+        if tenure is None:
+            # Use randomized tenure if not specified
+            tenure = random.randint(self.min_tenure, self.max_tenure)
+
+        self.tabu_items[move] = tenure
+        logger.debug(f"Added move {move} to tabu list with tenure {tenure}")
+
+    def is_tabu(self, move):
+        """
+        Check if a move is tabu.
+
+        Args:
+            move: The move to check
+
+        Returns:
+            True if the move is tabu, False otherwise
+        """
+        return move in self.tabu_items
+
+    def get_tenure(self, move):
+        """
+        Get the remaining tenure of a move.
+
+        Args:
+            move: The move to check
+
+        Returns:
+            Remaining tenure, or 0 if the move is not tabu
+        """
+        return self.tabu_items.get(move, 0)
+
+    def decrement_tenure(self):
+        """Decrement the tenure of all tabu moves and remove expired ones."""
+        expired_moves = []
+
+        for move, tenure in self.tabu_items.items():
+            if tenure <= 1:
+                expired_moves.append(move)
+            else:
+                self.tabu_items[move] = tenure - 1
+
+        for move in expired_moves:
+            del self.tabu_items[move]
+            logger.debug(f"Removed expired move {move} from tabu list")
+
+    def clear(self):
+        """Clear the tabu list."""
+        self.tabu_items.clear()
+        logger.debug("Cleared tabu list")
+
+    def increase_all_tenures(self, factor=1.5, duration=10):
+        """
+        Temporarily increase all tenures by a factor.
+
+        Args:
+            factor: Factor to increase tenures by
+            duration: Number of iterations the increase should last
+        """
+        for move in self.tabu_items:
+            self.tabu_items[move] = int(self.tabu_items[move] * factor)
+
+        logger.debug(f"Increased all tabu tenures by factor {factor}")
+
+        # Store the original min/max tenures
+        self.original_min_tenure = self.min_tenure
+        self.original_max_tenure = self.max_tenure
+
+        # Increase min/max tenures for future moves
+        self.min_tenure = int(self.min_tenure * factor)
+        self.max_tenure = int(self.max_tenure * factor)
+
+        # Schedule a reset after the specified duration
+        self.reset_after = duration
+
+    def reset_tenures(self):
+        """Reset tenures to original values."""
+        if hasattr(self, 'original_min_tenure') and hasattr(self, 'original_max_tenure'):
+            self.min_tenure = self.original_min_tenure
+            self.max_tenure = self.original_max_tenure
+            logger.debug("Reset tabu tenures to original values")
 
 class TabuOptimizer:
     """
     Tabu Search optimizer for surgery scheduling.
 
-    This class implements a Tabu Search algorithm to optimize surgery room assignments
-    by minimizing a cost function while respecting constraints.
+    This class implements a comprehensive Tabu Search algorithm for optimizing surgery schedules,
+    using components for feasibility checking, neighborhood generation, and solution evaluation.
     """
 
-    def __init__(self, scheduler_utils, tabu_list_size=10, max_iterations=100, max_no_improvement=20):
+    def __init__(
+        self,
+        db_session,
+        surgeries=None,
+        operating_rooms=None,
+        sds_times_data=None,
+        tabu_tenure=10,
+        max_iterations=100,
+        max_no_improvement=20,
+        time_limit_seconds=300,
+        evaluation_weights=None
+    ):
         """
-        Initialize the Tabu Optimizer.
+        Initialize the Tabu Search optimizer.
 
         Args:
-            scheduler_utils: SchedulerUtils instance with access to surgeries, rooms, and constraints
-            tabu_list_size: Size of the tabu list (number of recent moves to avoid)
-            max_iterations: Maximum number of iterations for the search
-            max_no_improvement: Maximum number of iterations without improvement before stopping
+            db_session: Database session for querying data
+            surgeries: List of Surgery objects
+            operating_rooms: List of OperatingRoom objects
+            sds_times_data: Dictionary of sequence-dependent setup times
+            tabu_tenure: Default tenure for tabu moves
+            max_iterations: Maximum number of iterations
+            max_no_improvement: Maximum number of iterations without improvement
+            time_limit_seconds: Time limit in seconds
+            evaluation_weights: Dictionary of weights for solution evaluation
         """
-        self.scheduler_utils = scheduler_utils
-        self.tabu_list_size = tabu_list_size
+        self.db_session = db_session
+        self.surgeries = surgeries if surgeries else []
+        self.operating_rooms = operating_rooms if operating_rooms else []
+        self.sds_times_data = sds_times_data if sds_times_data else {}
+
+        # Load data from database if not provided
+        if db_session and (not surgeries or not operating_rooms):
+            self._load_data_from_db()
+
+        # Initialize components
+        self.feasibility_checker = FeasibilityChecker(db_session)
+        self.solution_evaluator = SolutionEvaluator(db_session, evaluation_weights, sds_times_data)
+        self.neighborhood_generator = NeighborhoodStrategies(
+            db_session,
+            self.surgeries,
+            self.operating_rooms,
+            self.feasibility_checker,
+            sds_times_data
+        )
+
+        # Tabu Search parameters
+        self.tabu_tenure = tabu_tenure
         self.max_iterations = max_iterations
         self.max_no_improvement = max_no_improvement
-        self.tabu_list = []  # List of recent moves that are forbidden
+        self.time_limit_seconds = time_limit_seconds
+
+        logger.info(f"TabuOptimizer initialized with {len(self.surgeries)} surgeries and {len(self.operating_rooms)} operating rooms")
+
+    def _load_data_from_db(self):
+        """Load surgeries and operating rooms from database."""
+        try:
+            if not self.surgeries:
+                self.surgeries = self.db_session.query(Surgery).all()
+                logger.info(f"Loaded {len(self.surgeries)} surgeries from database")
+
+            if not self.operating_rooms:
+                self.operating_rooms = self.db_session.query(OperatingRoom).all()
+                logger.info(f"Loaded {len(self.operating_rooms)} operating rooms from database")
+        except Exception as e:
+            logger.error(f"Error loading data from database: {e}")
+
+    def initialize_solution(self):
+        """
+        Generate an initial feasible solution.
+
+        Returns:
+            List of SurgeryRoomAssignment objects
+        """
+        logger.info("Generating initial solution")
+
+        # Try to generate a random solution first
+        solution = self.neighborhood_generator.initialize_solution_randomly()
+
+        if solution:
+            logger.info(f"Generated random initial solution with {len(solution)} assignments")
+            return solution
+
+        # If random solution fails, use a greedy approach
+        logger.info("Random solution generation failed, using greedy approach")
+
+        # Sort surgeries by urgency and duration
+        sorted_surgeries = sorted(
+            self.surgeries,
+            key=lambda s: (
+                {'High': 0, 'Medium': 1, 'Low': 2}.get(getattr(s, 'urgency_level', 'Medium'), 1),
+                -getattr(s, 'duration_minutes', 60)
+            )
+        )
+
+        # Initialize empty solution
+        solution = []
+
+        # Track room schedules
+        room_schedules = {room.room_id: [] for room in self.operating_rooms}
+
+        # Assign surgeries to rooms
+        for surgery in sorted_surgeries:
+            # Find the best room and time slot for this surgery
+            best_room = None
+            best_start_time = None
+
+            for room in self.operating_rooms:
+                # Determine start time based on room schedule
+                if not room_schedules[room.room_id]:
+                    # First surgery in this room, start at 8:00 AM
+                    start_time = datetime.now().replace(hour=8, minute=0, second=0, microsecond=0)
+                else:
+                    # Get the end time of the last surgery in this room
+                    last_end_time = room_schedules[room.room_id][-1].end_time
+
+                    # Add setup time if we have SDST data
+                    setup_time = 15  # Default setup time in minutes
+                    if self.sds_times_data and room_schedules[room.room_id]:
+                        last_surgery = room_schedules[room.room_id][-1].surgery_id
+                        last_surgery_obj = next((s for s in self.surgeries if s.surgery_id == last_surgery), None)
+
+                        if last_surgery_obj and hasattr(last_surgery_obj, 'surgery_type_id') and hasattr(surgery, 'surgery_type_id'):
+                            last_type_id = last_surgery_obj.surgery_type_id
+                            current_type_id = surgery.surgery_type_id
+                            setup_time = self.sds_times_data.get((last_type_id, current_type_id), 15)
+
+                    # Start time is the end time of the last surgery plus setup time
+                    start_time = last_end_time + timedelta(minutes=setup_time)
+
+                # Calculate end time
+                duration = getattr(surgery, 'duration_minutes', 60)  # Default to 60 minutes if not specified
+                end_time = start_time + timedelta(minutes=duration)
+
+                # Check if this assignment is feasible
+                if self.feasibility_checker.is_feasible(
+                    surgery.surgery_id,
+                    room.room_id,
+                    start_time,
+                    end_time,
+                    solution
+                ):
+                    # If we don't have a best room yet, or this room allows an earlier start
+                    if best_room is None or start_time < best_start_time:
+                        best_room = room
+                        best_start_time = start_time
+
+            # If we found a feasible room, create the assignment
+            if best_room:
+                duration = getattr(surgery, 'duration_minutes', 60)
+                end_time = best_start_time + timedelta(minutes=duration)
+
+                assignment = SurgeryRoomAssignment(
+                    surgery_id=surgery.surgery_id,
+                    room_id=best_room.room_id,
+                    start_time=best_start_time,
+                    end_time=end_time
+                )
+
+                # Add to solution and room schedule
+                solution.append(assignment)
+                room_schedules[best_room.room_id].append(assignment)
+
+                logger.debug(f"Assigned surgery {surgery.surgery_id} to room {best_room.room_id} at {best_start_time}")
+
+        logger.info(f"Generated greedy initial solution with {len(solution)} assignments")
+        return solution
 
     def optimize(self, initial_solution=None):
         """
         Run the Tabu Search optimization algorithm.
 
         Args:
-            initial_solution: Optional initial solution. If None, one will be generated.
+            initial_solution: Optional initial solution
 
         Returns:
-            The best solution found (list of SurgeryRoomAssignment objects)
+            Best solution found (list of SurgeryRoomAssignment objects)
         """
         # Generate initial solution if not provided
         if initial_solution is None:
-            current_solution = self.scheduler_utils.initialize_solution()
+            current_solution = self.initialize_solution()
         else:
-            current_solution = initial_solution.copy()
+            current_solution = copy.deepcopy(initial_solution)
 
         if not current_solution:
-            logger.warning("Failed to generate an initial solution. No surgeries could be scheduled.")
+            logger.warning("Failed to generate an initial solution")
             return []
 
-        best_solution = current_solution.copy()
-        best_cost = self.calculate_cost(best_solution)
+        # Evaluate initial solution
+        current_score = self.solution_evaluator.evaluate_solution(current_solution)
+        best_solution = copy.deepcopy(current_solution)
+        best_score = current_score
 
+        logger.info(f"Initial solution score: {best_score:.4f}")
+
+        # Initialize tabu list
+        tabu_list = TabuList(default_tenure=self.tabu_tenure)
+
+        # Initialize counters and timers
         iterations_without_improvement = 0
+        start_time = time.time()
 
+        # Main optimization loop
         for iteration in range(self.max_iterations):
-            # Generate neighborhood (possible moves)
-            neighbors = self.generate_neighbors(current_solution)
-
-            if not neighbors:
-                logger.info("No feasible neighbors found. Stopping search.")
+            # Check termination conditions
+            if iterations_without_improvement >= self.max_no_improvement:
+                logger.info(f"Stopping: {self.max_no_improvement} iterations without improvement")
                 break
 
-            # Find best non-tabu neighbor
+            if self.time_limit_seconds and time.time() - start_time > self.time_limit_seconds:
+                logger.info(f"Stopping: time limit of {self.time_limit_seconds} seconds reached")
+                break
+
+            # Decrement tabu tenures
+            tabu_list.decrement_tenure()
+
+            # Generate neighbor solutions
+            neighbors = self.neighborhood_generator.generate_neighbor_solutions(current_solution, tabu_list)
+
+            if not neighbors:
+                logger.warning("No feasible neighbors found")
+                break
+
+            # Find best non-tabu neighbor or best tabu neighbor that meets aspiration criterion
             best_neighbor = None
-            best_neighbor_cost = float('inf')
+            best_neighbor_score = float('-inf')
+            best_neighbor_move = None
 
-            for neighbor, move in neighbors:
-                neighbor_cost = self.calculate_cost(neighbor)
+            for neighbor in neighbors:
+                neighbor_solution = neighbor['assignments']
+                neighbor_move = neighbor['move']
 
-                # Check if move is not in tabu list or satisfies aspiration criteria
-                if (move not in self.tabu_list or
-                    neighbor_cost < best_cost):  # Aspiration criterion
+                # Evaluate neighbor
+                neighbor_score = self.solution_evaluator.evaluate_solution(neighbor_solution)
 
-                    if neighbor_cost < best_neighbor_cost:
-                        best_neighbor = neighbor
-                        best_neighbor_cost = neighbor_cost
-                        best_move = move
+                # Check if move is tabu
+                is_tabu = tabu_list.is_tabu(neighbor_move)
 
-            # If no non-tabu move found, pick the best tabu move
+                # Apply aspiration criterion: accept tabu move if it's better than the best solution so far
+                if not is_tabu or neighbor_score > best_score:
+                    if neighbor_score > best_neighbor_score:
+                        best_neighbor = neighbor_solution
+                        best_neighbor_score = neighbor_score
+                        best_neighbor_move = neighbor_move
+
+            # If no non-tabu neighbor found, pick the best tabu neighbor
             if best_neighbor is None and neighbors:
-                best_neighbor, best_move = min(neighbors, key=lambda x: self.calculate_cost(x[0]))
-                best_neighbor_cost = self.calculate_cost(best_neighbor)
+                best_neighbor = max(neighbors, key=lambda n: self.solution_evaluator.evaluate_solution(n['assignments']))
+                best_neighbor_solution = best_neighbor['assignments']
+                best_neighbor_score = self.solution_evaluator.evaluate_solution(best_neighbor_solution)
+                best_neighbor_move = best_neighbor['move']
+                best_neighbor = best_neighbor_solution
 
             # Update current solution
             current_solution = best_neighbor
+            current_score = best_neighbor_score
 
-            # Update tabu list
-            self.tabu_list.append(best_move)
-            if len(self.tabu_list) > self.tabu_list_size:
-                self.tabu_list.pop(0)  # Remove oldest move
+            # Add move to tabu list
+            tabu_list.add(best_neighbor_move)
 
             # Update best solution if improved
-            if best_neighbor_cost < best_cost:
-                best_solution = best_neighbor.copy()
-                best_cost = best_neighbor_cost
+            if current_score > best_score:
+                best_solution = copy.deepcopy(current_solution)
+                best_score = current_score
                 iterations_without_improvement = 0
-                logger.info(f"Iteration {iteration}: Found improved solution with cost {best_cost}")
+                logger.info(f"Iteration {iteration+1}: New best solution found with score {best_score:.4f}")
             else:
                 iterations_without_improvement += 1
+                logger.info(f"Iteration {iteration+1}: No improvement, current best score {best_score:.4f}")
 
-            # Check stopping criterion
-            if iterations_without_improvement >= self.max_no_improvement:
-                logger.info(f"Stopping after {iteration+1} iterations due to no improvement")
-                break
+            # Apply diversification if stuck
+            if iterations_without_improvement == self.max_no_improvement // 2:
+                logger.info("Applying diversification strategy")
 
-        logger.info(f"Tabu Search completed. Best solution cost: {best_cost}")
+                # Increase tabu tenures temporarily
+                tabu_list.increase_all_tenures(factor=1.5, duration=10)
+
+                # Generate a partially random solution
+                diversified_solution = self._diversify_solution(current_solution)
+
+                if diversified_solution:
+                    current_solution = diversified_solution
+                    current_score = self.solution_evaluator.evaluate_solution(current_solution)
+                    logger.info(f"Diversified solution score: {current_score:.4f}")
+
+        logger.info(f"Optimization complete. Best score: {best_score:.4f}")
         return best_solution
 
-    def generate_neighbors(self, solution):
+    def _diversify_solution(self, solution):
         """
-        Generate neighboring solutions by applying moves to the current solution.
+        Apply diversification to a solution.
 
         Args:
-            solution: Current solution (list of SurgeryRoomAssignment objects)
+            solution: Current solution
 
         Returns:
-            List of (neighbor_solution, move) tuples
+            Diversified solution
         """
-        neighbors = []
-
-        # Move 1: Swap two surgeries between rooms
-        swap_neighbors = self._generate_swap_neighbors(solution)
-        neighbors.extend(swap_neighbors)
-
-        # Move 2: Move a surgery to a different time slot in the same room
-        move_neighbors = self._generate_move_neighbors(solution)
-        neighbors.extend(move_neighbors)
-
-        return neighbors
-
-    def _generate_swap_neighbors(self, solution):
-        """Generate neighbors by swapping surgeries between rooms."""
-        neighbors = []
-
-        for i in range(len(solution)):
-            for j in range(i+1, len(solution)):
-                # Skip if surgeries are in the same room
-                if solution[i].room_id == solution[j].room_id:
-                    continue
-
-                # Create a new solution with swapped room assignments
-                new_solution = solution.copy()
-
-                # Check if swap is feasible
-                if self._is_swap_feasible(solution[i], solution[j]):
-                    # Perform the swap
-                    new_i = self._create_swapped_assignment(solution[i], solution[j].room_id)
-                    new_j = self._create_swapped_assignment(solution[j], solution[i].room_id)
-
-                    # Replace the original assignments
-                    new_solution[i] = new_i
-                    new_solution[j] = new_j
-
-                    # Define the move for tabu list
-                    move = ('swap', solution[i].surgery_id, solution[j].surgery_id)
-
-                    neighbors.append((new_solution, move))
-
-        return neighbors
-
-    def _generate_move_neighbors(self, solution):
-        """Generate neighbors by moving surgeries to different time slots."""
-        neighbors = []
-
-        for i, assignment in enumerate(solution):
-            # Try moving the surgery earlier or later
-            for time_shift in [-30, 30]:  # Try 30 minutes earlier or later
-                new_start = assignment.start_time + timedelta(minutes=time_shift)
-                new_end = assignment.end_time + timedelta(minutes=time_shift)
-
-                # Check if the new time slot is feasible
-                if self._is_time_slot_feasible(assignment.surgery_id, assignment.room_id,
-                                              new_start, new_end, solution, assignment):
-                    # Create a new solution with the moved assignment
-                    new_solution = solution.copy()
-                    new_assignment = self._create_moved_assignment(assignment, new_start, new_end)
-                    new_solution[i] = new_assignment
-
-                    # Define the move for tabu list
-                    move = ('move', assignment.surgery_id, time_shift)
-
-                    neighbors.append((new_solution, move))
-
-        return neighbors
-
-    def _is_swap_feasible(self, assignment1, assignment2):
-        """Check if swapping two assignments is feasible."""
-        # This is a simplified check - in a real implementation, you would need to:
-        # 1. Check if the rooms can accommodate the surgeries (equipment, etc.)
-        # 2. Check if the surgeons are available at the swapped times
-        # 3. Check if the new assignments don't conflict with other surgeries
-        return True  # Placeholder - implement actual feasibility check
-
-    def _is_time_slot_feasible(self, surgery_id, room_id, start_time, end_time,
-                              current_solution, current_assignment):
-        """Check if a new time slot for a surgery is feasible."""
-        # This is a simplified check - in a real implementation, you would need to:
-        # 1. Check if the new time slot doesn't overlap with other surgeries in the same room
-        # 2. Check if the surgeon is available at the new time
-        # 3. Check if the equipment is available at the new time
-        return True  # Placeholder - implement actual feasibility check
-
-    def _create_swapped_assignment(self, original_assignment, new_room_id):
-        """Create a new assignment with a different room."""
-        from simple_models import SurgeryRoomAssignment
-
-        return SurgeryRoomAssignment(
-            surgery_id=original_assignment.surgery_id,
-            room_id=new_room_id,
-            start_time=original_assignment.start_time,
-            end_time=original_assignment.end_time
-        )
-
-    def _create_moved_assignment(self, original_assignment, new_start, new_end):
-        """Create a new assignment with a different time slot."""
-        from simple_models import SurgeryRoomAssignment
-
-        return SurgeryRoomAssignment(
-            surgery_id=original_assignment.surgery_id,
-            room_id=original_assignment.room_id,
-            start_time=new_start,
-            end_time=new_end
-        )
-
-    def calculate_cost(self, solution):
-        """
-        Calculate the cost of a solution.
-
-        The cost function can include various factors such as:
-        - Total makespan (time to complete all surgeries)
-        - Idle time between surgeries
-        - Overtime beyond regular hours
-        - Preference violations (surgeon preferences, etc.)
-
-        Args:
-            solution: List of SurgeryRoomAssignment objects
-
-        Returns:
-            Cost value (lower is better)
-        """
+        # Randomly select a subset of surgeries to reschedule
         if not solution:
-            return float('inf')
+            return None
 
-        # Calculate makespan (time from start of first surgery to end of last surgery)
-        start_times = [a.start_time for a in solution]
-        end_times = [a.end_time for a in solution]
+        num_to_reschedule = max(1, len(solution) // 3)
+        to_reschedule = random.sample(solution, num_to_reschedule)
 
-        earliest_start = min(start_times) if start_times else DatetimeWrapper.now()
-        latest_end = max(end_times) if end_times else DatetimeWrapper.now()
+        # Keep the assignments that we're not rescheduling
+        kept_assignments = [a for a in solution if a not in to_reschedule]
 
-        makespan = (latest_end - earliest_start).total_seconds() / 60  # in minutes
+        # Generate new assignments for the selected surgeries
+        new_assignments = []
 
-        # Calculate idle time between surgeries in each room
-        idle_time = self._calculate_idle_time(solution)
+        for assignment in to_reschedule:
+            surgery_id = assignment.surgery_id
+            surgery = next((s for s in self.surgeries if s.surgery_id == surgery_id), None)
 
-        # Calculate overtime (surgeries scheduled beyond regular hours)
-        overtime = self._calculate_overtime(solution)
+            if not surgery:
+                continue
 
-        # Combine the factors with weights
-        cost = makespan + 2 * idle_time + 3 * overtime
+            # Randomly select a room
+            room = random.choice(self.operating_rooms)
 
-        return cost
+            # Generate a random start time between 8:00 AM and 4:00 PM
+            base_time = datetime.now().replace(hour=8, minute=0, second=0, microsecond=0)
+            max_start_hour = 16  # 4:00 PM
+            random_hours = random.randint(0, max_start_hour - 8)
+            random_minutes = random.choice([0, 15, 30, 45])
+            start_time = base_time + timedelta(hours=random_hours, minutes=random_minutes)
 
-    def _calculate_idle_time(self, solution):
-        """Calculate total idle time between surgeries in all rooms."""
-        # Group assignments by room
-        room_assignments = {}
-        for assignment in solution:
-            if assignment.room_id not in room_assignments:
-                room_assignments[assignment.room_id] = []
-            room_assignments[assignment.room_id].append(assignment)
+            # Calculate end time
+            duration = getattr(surgery, 'duration_minutes', 60)
+            end_time = start_time + timedelta(minutes=duration)
 
-        total_idle_time = 0
+            # Create new assignment
+            new_assignment = SurgeryRoomAssignment(
+                surgery_id=surgery_id,
+                room_id=room.room_id,
+                start_time=start_time,
+                end_time=end_time
+            )
 
-        # Calculate idle time in each room
-        for room_id, assignments in room_assignments.items():
-            # Sort assignments by start time
-            sorted_assignments = sorted(assignments, key=lambda a: a.start_time)
+            new_assignments.append(new_assignment)
 
-            for i in range(1, len(sorted_assignments)):
-                prev_end = sorted_assignments[i-1].end_time
-                curr_start = sorted_assignments[i].start_time
+        # Combine kept and new assignments
+        diversified_solution = kept_assignments + new_assignments
 
-                if curr_start > prev_end:
-                    idle_minutes = (curr_start - prev_end).total_seconds() / 60
-                    total_idle_time += idle_minutes
-
-        return total_idle_time
-
-    def _calculate_overtime(self, solution):
-        """Calculate total overtime beyond regular hours."""
-        # Define regular hours (e.g., 8:00 AM to 5:00 PM)
-        regular_end_hour = 17  # 5:00 PM
-
-        total_overtime = 0
-
-        for assignment in solution:
-            # Check if the surgery ends after regular hours
-            if assignment.end_time.hour >= regular_end_hour:
-                # Calculate minutes past regular hours
-                regular_end = datetime.combine(assignment.end_time.date(),
-                                             datetime.min.time().replace(hour=regular_end_hour))
-
-                if assignment.end_time > regular_end:
-                    overtime_minutes = (assignment.end_time - regular_end).total_seconds() / 60
-                    total_overtime += overtime_minutes
-
-        return total_overtime
+        # Check if the solution is feasible
+        if self.feasibility_checker.check_solution_feasibility(diversified_solution):
+            return diversified_solution
+        else:
+            # If not feasible, try again with fewer surgeries
+            if num_to_reschedule > 1:
+                num_to_reschedule = num_to_reschedule // 2
+                return self._diversify_solution(solution)
+            else:
+                # If we can't diversify, return the original solution
+                return solution

@@ -1,3 +1,4 @@
+from datetime import datetime
 from sqlalchemy import (
     Column,
     Integer,
@@ -226,6 +227,18 @@ class SurgeonPreference(Base):
     surgeon = relationship("Surgeon", back_populates="preferences")
 
 
+class SurgeonAvailability(Base):
+    __tablename__ = "surgeonavailability"
+    availability_id = Column(Integer, primary_key=True, autoincrement=True)
+    surgeon_id = Column(
+        Integer,
+        ForeignKey("surgeon.surgeon_id", ondelete="CASCADE", onupdate="CASCADE"),
+    )
+    day_of_week = Column(String(10), nullable=False)  # Monday, Tuesday, etc.
+    start_time = Column(String(5), nullable=False)  # Format: "HH:MM"
+    end_time = Column(String(5), nullable=False)  # Format: "HH:MM"
+
+
 class SurgeryRoomAssignment(Base):
     __tablename__ = "surgeryroomassignment"
     assignment_id = Column(Integer, primary_key=True, autoincrement=True)
@@ -298,5 +311,48 @@ class SequenceDependentSetupTime(Base):
         back_populates="setups_to_this_type"
     )
 
+
+class User(Base):
+    """
+    User model for authentication and authorization.
+
+    This model stores user information for authentication and authorization.
+    """
+    __tablename__ = "user"
+
+    user_id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String(50), nullable=False, unique=True)
+    email = Column(String(100), nullable=False, unique=True)
+    hashed_password = Column(String(255), nullable=False)
+    full_name = Column(String(100), nullable=True)
+    role = Column(String(20), nullable=False, server_default="user")
+    staff_id = Column(Integer, ForeignKey("staff.staff_id", ondelete="SET NULL"), nullable=True)
+    is_active = Column(Boolean, nullable=False, server_default="1")
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    last_login = Column(DateTime, nullable=True)
+
+    # Relationship to Staff
+    staff = relationship("Staff")
+
     def __repr__(self):
-        return f"<SequenceDependentSetupTime(id={self.id}, from_type_id={self.from_surgery_type_id}, to_type_id={self.to_surgery_type_id}, time={self.setup_time_minutes})>"
+        return f"<User(user_id={self.user_id}, username='{self.username}', role='{self.role}')>"
+
+
+class AuditLog(Base):
+    """
+    Audit log for tracking changes to entities and user actions.
+
+    This model stores audit events for compliance and security purposes.
+    """
+    __tablename__ = "auditlog"
+
+    log_id = Column(Integer, primary_key=True, autoincrement=True)
+    timestamp = Column(DateTime, nullable=False, default=datetime.now)
+    user_id = Column(String(100), nullable=False)
+    action = Column(String(50), nullable=False)
+    entity_type = Column(String(100), nullable=False)
+    entity_id = Column(String(100), nullable=False)
+    details = Column(Text, nullable=True)
+
+    def __repr__(self):
+        return f"<AuditLog(log_id={self.log_id}, timestamp={self.timestamp}, action='{self.action}', entity_type='{self.entity_type}', entity_id={self.entity_id})>"

@@ -1,368 +1,632 @@
-# solution_evaluator.py
+"""
+Solution evaluator for surgery scheduling.
+
+This module provides a comprehensive solution evaluator that works with the full models
+and evaluates schedules based on multiple criteria.
+"""
+
 import logging
 from datetime import datetime, timedelta
-from models import Surgery, OperatingRoom, SurgeryRoomAssignment, Surgeon, SurgeryType # Ensure Surgeon and SurgeryType are imported
-from utils.preference_satisfaction_calculator import PreferenceSatisfactionCalculator
-from utils.workload_balance_calculator import WorkloadBalanceCalculator
-# Placeholder for operational cost calculator, to be created if needed
-# from utils.operational_cost_calculator import OperationalCostCalculator
+from typing import List, Dict, Any, Optional, Tuple, Union
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+from models import (
+    Surgery,
+    OperatingRoom,
+    Surgeon,
+    SurgeryRoomAssignment,
+    SurgeryType,
+    SurgeonPreference
 )
 
+logger = logging.getLogger(__name__)
 
 class SolutionEvaluator:
+    """
+    Solution evaluator for surgery scheduling.
+
+    This class evaluates surgery schedules based on multiple criteria, including:
+    - Operating room utilization
+    - Sequence-dependent setup times
+    - Surgeon preference satisfaction
+    - Workload balance
+    - Patient wait time
+    - Emergency surgery priority
+    - Operational costs
+    """
+
     def __init__(self, db_session, weights=None, sds_times_data=None):
+        """
+        Initialize the solution evaluator.
+
+        Args:
+            db_session: Database session for querying data
+            weights: Dictionary of weights for each evaluation criterion
+            sds_times_data: Dictionary of sequence-dependent setup times
+        """
         self.db_session = db_session
         self.weights = weights if weights else self._default_weights()
         self.sds_times_data = sds_times_data if sds_times_data else {}
-        self.preference_calculator = PreferenceSatisfactionCalculator(db_session=self.db_session)
-        self.workload_calculator = WorkloadBalanceCalculator(db_session=self.db_session) # db_session might not be strictly needed if data is passed
-        # self.cost_calculator = OperationalCostCalculator(db_session=self.db_session) # If using a cost calculator
-        logging.info(f"SolutionEvaluator initialized with weights: {self.weights} and {len(self.sds_times_data)} SDST entries.")
+
+        # Cache for database objects
+        self.surgeries_cache = {}
+        self.surgeons_cache = {}
+        self.rooms_cache = {}
+        self.surgery_types_cache = {}
+        self.surgeon_preferences_cache = {}
+
+        # Load data into cache if db_session is provided
+        if self.db_session:
+            self._load_cache_data()
+
+        logger.info(f"SolutionEvaluator initialized with weights: {self.weights}")
+
+    def _load_cache_data(self):
+        """Load data from database into cache for faster access."""
+        try:
+            # Load surgeries
+            surgeries = self.db_session.query(Surgery).all()
+            self.surgeries_cache = {surgery.surgery_id: surgery for surgery in surgeries}
+
+            # Load surgeons
+            surgeons = self.db_session.query(Surgeon).all()
+            self.surgeons_cache = {surgeon.surgeon_id: surgeon for surgeon in surgeons}
+
+            # Load operating rooms
+            rooms = self.db_session.query(OperatingRoom).all()
+            self.rooms_cache = {room.room_id: room for room in rooms}
+
+            # Load surgery types
+            surgery_types = self.db_session.query(SurgeryType).all()
+            self.surgery_types_cache = {st.surgery_type_id: st for st in surgery_types}
+
+            # Load surgeon preferences
+            surgeon_prefs = self.db_session.query(SurgeonPreference).all()
+            self.surgeon_preferences_cache = {}
+            for pref in surgeon_prefs:
+                if pref.surgeon_id not in self.surgeon_preferences_cache:
+                    self.surgeon_preferences_cache[pref.surgeon_id] = []
+                self.surgeon_preferences_cache[pref.surgeon_id].append(pref)
+
+            logger.info("Cache data loaded successfully")
+        except Exception as e:
+            logger.error(f"Error loading cache data: {e}")
 
     def _default_weights(self):
-        # Default weights for various components of the objective function
+        """
+        Get default weights for evaluation criteria.
+
+        Returns:
+            Dictionary of weights
+        """
         return {
             "or_utilization": 0.20,  # Maximize OR utilization
-            "sds_time_penalty": -0.20, # Minimize total sequence-dependent setup time (negative weight for penalty)
-            "staff_overtime_penalty": -0.10,  # Minimize staff overtime (negative weight for penalty)
-            "surgeon_preference_satisfaction": 0.15, # Maximize surgeon preference satisfaction
-            "workload_balance": 0.15, # Maximize workload balance (e.g., minimize std dev of workload)
-            "patient_wait_time": -0.1,  # Minimize patient wait time
-            "emergency_surgery_priority": 0.1,  # Prioritize emergency surgeries
-            "operational_cost_penalty": -0.0, # Minimize operational costs (e.g. consumables, specific room costs) - currently zeroed out
-            "feasibility_penalty": -100.0 # Large penalty for infeasible solutions
+            "sds_time_penalty": -0.15,  # Minimize sequence-dependent setup time
+            "surgeon_preference_satisfaction": 0.15,  # Maximize surgeon preference satisfaction
+            "workload_balance": 0.15,  # Maximize workload balance
+            "patient_wait_time": -0.10,  # Minimize patient wait time
+            "emergency_surgery_priority": 0.15,  # Prioritize emergency surgeries
+            "operational_cost": -0.10,  # Minimize operational costs
+            "staff_overtime": -0.10,  # Minimize staff overtime
+            "feasibility_penalty": -100.0  # Large penalty for infeasible solutions
         }
 
-    def evaluate_solution(self, current_solution_assignments, placeholder_start_time, placeholder_end_time):
-        # current_solution_assignments is a list of SurgeryRoomAssignment objects
-        # placeholder_start_time and placeholder_end_time define the evaluation window
-        logging.debug(f"Evaluating solution with {len(current_solution_assignments)} assignments.")
+    def evaluate_solution(self, solution, schedule_start_time=None, schedule_end_time=None):
+        """
+        Evaluate a solution based on multiple criteria.
 
-        if not current_solution_assignments:
-            logging.warning("Attempted to evaluate an empty solution.")
-            return 0  # Or a very low score for an empty schedule
+        Args:
+            solution: List of SurgeryRoomAssignment objects
+            schedule_start_time: Optional start time of the schedule window
+            schedule_end_time: Optional end time of the schedule window
 
-        # Basic feasibility check (can be expanded or rely on FeasibilityChecker)
-        # For now, assume FeasibilityChecker has already vetted the solution if it's passed here.
-        # If not, a basic check could be: is_feasible = self._check_basic_feasibility(current_solution_assignments)
-        # if not is_feasible:
-        #     return self.weights["feasibility_penalty"] # Apply a heavy penalty
-
-        total_score, component_scores = self._calculate_objective_score(
-            current_solution_assignments, placeholder_start_time, placeholder_end_time
-        )
-        logging.info(f"Solution evaluated. Total Score: {total_score:.2f}, Components: {component_scores}")
-        return total_score
-
-    def _calculate_objective_score(self, assignments, schedule_start_time, schedule_end_time):
-        # assignments: list of SurgeryRoomAssignment objects
-        # schedule_start_time, schedule_end_time: datetime objects for the overall schedule window
-
-        component_scores = {
-            "or_utilization": 0,
-            "sds_time_penalty": 0,
-            "staff_overtime_penalty": 0,
-            "surgeon_preference_satisfaction": 0,
-            "workload_balance": 0, # Lower is better for std_dev, so this might need inversion or negative weight
-            "patient_wait_time": 0,
-            "emergency_surgery_priority": 0,
-            "operational_cost_penalty": 0
-        }
-
-        # 0. Calculate total SDST for the current schedule
-        # This needs to be done first as it might influence other calculations or just be a direct cost.
-        component_scores["sds_time_penalty"] = self._calculate_sds_cost(assignments)
-
-        # 1. OR Utilization
-        # Needs a list of all ORs to calculate total available time
-        all_operating_rooms = self.db_session.query(OperatingRoom).all()
-        component_scores["or_utilization"] = self._calculate_or_utilization(
-            assignments, all_operating_rooms, schedule_start_time, schedule_end_time
-        )
-
-        # 2. Staff Overtime Penalty (Placeholder - needs detailed staff schedule data)
-        # component_scores["staff_overtime_penalty"] = self._calculate_staff_overtime(assignments)
-
-        # 3. Surgeon Preference Satisfaction
-        # Assumes assignments contain SurgeryRoomAssignment objects, which have .surgery and .room attributes
-        # The preference calculator now expects a list of SurgeryRoomAssignment objects
-        component_scores["surgeon_preference_satisfaction"] = self.preference_calculator.calculate(assignments) / 100.0 # Normalize to 0-1
-
-        # 4. Workload Balance
-        # The workload calculator now expects a list of SurgeryRoomAssignment objects
-        # Lower std_dev is better. We need to convert this to a score where higher is better.
-        # For example, score = 1 / (1 + std_dev) or use a negative weight for std_dev.
-        # If workload_calculator returns std_dev (lower is better):
-        raw_workload_std_dev = self.workload_calculator.calculate_workload_balance(assignments)
-        # Normalize: e.g. if max conceivable std_dev is X, then score = (X - raw_workload_std_dev) / X
-        # Or simply, if weight is positive, use 1/(1+std_dev) or similar to make higher score better.
-        # If weight is negative, can use raw_std_dev directly.
-        # Let's assume a positive weight for "workload_balance" means we want to maximize a balance score.
-        # A simple approach: if std_dev is 0 (perfect balance), score is 1. As std_dev increases, score decreases.
-        # Max typical std_dev could be, e.g., avg number of surgeries. For now, using 1/(1+std_dev).
-        component_scores["workload_balance"] = 1.0 / (1.0 + raw_workload_std_dev) # Higher is better
-
-        # 5. Patient Wait Time (Simplified - actual wait time requires more data like request date)
-        component_scores["patient_wait_time"] = self._calculate_avg_patient_metric(assignments, metric_type="wait_time")
-
-        # 6. Emergency Surgery Priority
-        component_scores["emergency_surgery_priority"] = self._calculate_avg_patient_metric(assignments, metric_type="emergency_priority")
-
-        # 7. Operational Cost Penalty (Placeholder - needs cost data per room, equipment, etc.)
-        # component_scores["operational_cost_penalty"] = self.cost_calculator.calculate_total_cost(assignments) # Example
-
-        # Combine scores using weights
-        total_objective_score = 0
-        for component, score in component_scores.items():
-            total_objective_score += self.weights.get(component, 0) * score
-            logging.debug(f"Component {component}: Score = {score:.4f}, Weighted Contribution = {self.weights.get(component, 0) * score:.4f}")
-
-        return total_objective_score, component_scores
-
-    def _calculate_or_utilization(self, assignments, operating_rooms, schedule_start_time, schedule_end_time):
-        total_scheduled_time_minutes = 0
-        for assignment in assignments:
-            if assignment.start_time and assignment.end_time and assignment.surgery:
-                # Ensure surgery duration is correctly accessed
-                duration = assignment.surgery.duration_minutes
-                total_scheduled_time_minutes += duration
-
-        total_available_time_minutes = 0
-        # Assuming schedule_start_time and schedule_end_time define the operational window for ALL rooms for simplicity.
-        # A more precise calculation would use individual room availability if it varies.
-        operational_duration_per_day = (schedule_end_time - schedule_start_time).total_seconds() / 60
-        if operational_duration_per_day <= 0:
-            logging.warning("Operational duration is zero or negative. Cannot calculate OR utilization.")
-            return 0 # Avoid division by zero if schedule window is invalid
-
-        for room in operating_rooms:
-            # This assumes all rooms are available for the entire schedule_end_time - schedule_start_time window.
-            # TODO: Consider specific room availability schedules if they exist.
-            total_available_time_minutes += operational_duration_per_day
-
-        if total_available_time_minutes == 0:
-            logging.warning("Total available OR time is zero. Cannot calculate OR utilization.")
-            return 0 # Avoid division by zero
-
-        utilization_percentage = (total_scheduled_time_minutes / total_available_time_minutes) # Already a 0-1 scale if durations are consistent
-        logging.debug(f"OR Utilization: Total Scheduled Minutes = {total_scheduled_time_minutes}, Total Available Minutes = {total_available_time_minutes}, Utilization = {utilization_percentage:.2%}")
-        return utilization_percentage # Return as a fraction (0.0 to 1.0)
-
-    def _calculate_avg_patient_metric(self, assignments, metric_type="wait_time"):
-        # Simplified: for 'wait_time', assumes lower is better (e.g. days waiting)
-        # For 'emergency_priority', assumes higher is better (e.g. urgency score)
-        # This needs actual data from Surgery object (e.g., surgery.urgency_level, surgery.request_date)
-        total_metric_value = 0
-        count = 0
-        for assignment in assignments:
-            if not assignment.surgery: continue
-            surgery = assignment.surgery
-            if metric_type == "wait_time":
-                # Placeholder: requires surgery.request_date and assignment.start_time
-                # Example: (assignment.start_time.date() - surgery.request_date).days
-                # For now, let's use a proxy like 1 / (1 + surgery.duration_minutes) to show shorter surgeries are preferred for 'wait_time'
-                # This is a placeholder and should be replaced with actual wait time calculation.
-                # Let's assume wait_time is a score from 0 to 1, where 1 is best (shortest wait)
-                # For now, let's use a dummy value or a simple proxy. If we want to minimize something, it should be inverted.
-                # Let's say lower duration means less 'wait' in a queue, so 1/(1+duration) is a proxy for 'goodness'.
-                # This is highly conceptual and needs real data.
-                # For now, returning a neutral 0.5, assuming normalized score.
-                metric_value = 0.5 # Placeholder
-            elif metric_type == "emergency_priority":
-                # Urgency: High (score 3), Medium (score 2), Low (score 1)
-                urgency_map = {"High": 3, "Medium": 2, "Low": 1}
-                # Ensure urgency_level is a string before mapping
-                # Accessing surgery_type.name requires surgery.surgery_type to be populated correctly.
-                # For now, we assume surgery.urgency_level is directly available.
-                urgency_str = str(surgery.urgency_level) if surgery.urgency_level else "Low"
-                metric_value = urgency_map.get(urgency_str, 0)
-                # Normalize: if max score is 3, then metric_value / 3.0
-                metric_value = metric_value / 3.0
-            else:
-                metric_value = 0
-
-            total_metric_value += metric_value
-            count += 1
-
-        if count == 0: return 0
-        avg_metric = total_metric_value / count
-        # For wait_time, if we calculated actual days and want to minimize, this avg_metric would be used with a negative weight.
-        # If we converted it to a 0-1 score where higher is better, then positive weight.
-        # Current placeholder for wait_time is already 'higher is better'.
-        # Current emergency_priority is 'higher is better' (0-1 normalized).
-        logging.debug(f"Average Patient Metric ({metric_type}): {avg_metric:.4f}")
-        return avg_metric
-
-    # Placeholder for _calculate_staff_overtime - requires staff shift data and overtime rules
-    # def _calculate_staff_overtime(self, assignments):
-    #     total_overtime_hours = 0
-    #     # Logic to calculate overtime based on staff assignments and shifts
-    #     # This would iterate through assignments, check staff involved, their scheduled hours vs. actual work
-    #     logging.debug(f"Calculated total staff overtime: {total_overtime_hours} hours.")
-    #     # Return a penalty score, e.g., normalized overtime hours (higher means more penalty)
-    #     # So if weight is negative, this value should be positive.
-    #     return total_overtime_hours
-
-    def _calculate_sds_cost(self, assignments: list[SurgeryRoomAssignment]):
-        """Calculates the total sequence-dependent setup time for the given schedule."""
-        total_sds_minutes = 0
-        # Group assignments by room and sort by start time to find sequences
-        assignments_by_room = {}
-        for assign in assignments:
-            if assign.room_id not in assignments_by_room:
-                assignments_by_room[assign.room_id] = []
-            assignments_by_room[assign.room_id].append(assign)
-
-        for room_id, room_assignments in assignments_by_room.items():
-            # Sort assignments in this room by start time
-            room_assignments.sort(key=lambda x: x.start_time)
-            last_surgery_type_id = None
-            for current_assignment in room_assignments:
-                if not current_assignment.surgery or not current_assignment.surgery.surgery_type_id:
-                    logging.warning(f"Skipping SDST calculation for assignment due to missing surgery/type: {current_assignment.surgery_id}")
-                    continue
-
-                current_surgery_type_id = current_assignment.surgery.surgery_type_id
-
-                if last_surgery_type_id is not None:
-                    # Lookup SDST from the pre-loaded dictionary
-                    sds_key = (last_surgery_type_id, current_surgery_type_id)
-                    setup_time = self.sds_times_data.get(sds_key, 0)
-                    total_sds_minutes += setup_time
-                    logging.debug(f"Room {room_id}: SDST from type {last_surgery_type_id} to {current_surgery_type_id} = {setup_time} min")
-
-                last_surgery_type_id = current_surgery_type_id
-
-        logging.debug(f"Total calculated SDST for schedule: {total_sds_minutes} minutes.")
-        # This value is a penalty, so a higher number is worse.
-        # If the weight for "sds_time_penalty" is negative, this positive value will correctly reduce the score.
-        return total_sds_minutes
-
-    def _basic_evaluate_solution(self, current_solution_assignments, placeholder_start_time, placeholder_end_time):
-        # This is a simpler evaluation, perhaps focusing only on OR utilization or a subset of factors.
-        # Kept for potential use if a lightweight evaluation is needed sometimes.
-        logging.debug(f"Basic evaluation for solution with {len(current_solution_assignments)} assignments.")
-        if not current_solution_assignments:
+        Returns:
+            Total score for the solution
+        """
+        if not solution:
+            logger.warning("Empty solution provided for evaluation")
             return 0
 
-        all_operating_rooms = self.db_session.query(OperatingRoom).all()
-        or_utilization_score = self._calculate_or_utilization(
-            current_solution_assignments, all_operating_rooms, placeholder_start_time, placeholder_end_time
-        )
+        # If schedule window not provided, determine from solution
+        if not schedule_start_time or not schedule_end_time:
+            start_times = [a.start_time for a in solution if a.start_time]
+            end_times = [a.end_time for a in solution if a.end_time]
 
-        # Example: Basic score is just OR utilization
-        # Or a weighted sum of a few key factors, using a simplified set of weights.
-        basic_score = or_utilization_score * self.weights.get("or_utilization", 0.5) # Use default if not in main weights
+            if not start_times or not end_times:
+                logger.warning("Solution has no valid start/end times")
+                return 0
 
-        logging.info(f"Basic evaluation score: {basic_score:.2f} (based on OR Utilization: {or_utilization_score:.2%})")
-        return basic_score
+            schedule_start_time = min(start_times)
+            schedule_end_time = max(end_times)
 
-# Example usage (conceptual)
-if __name__ == "__main__":
-    # This example assumes you have a SQLAlchemy session (db_session) and mock data.
-    # from db_config import SessionLocal # Your SQLAlchemy session factory
-    # db_session = SessionLocal()
+        # Calculate scores for each criterion
+        scores = {}
 
-    # Mocking db_session and data for standalone execution:
-    class MockDBSession:
-        def query(self, model):
-            if model == OperatingRoom:
-                # Return a list of mock OperatingRoom objects
-                room1 = OperatingRoom(room_id=1, location="North Wing")
-                # setattr(room1, 'id', 1) # if 'id' is the primary key name used elsewhere
-                room2 = OperatingRoom(room_id=2, location="South Wing")
-                # setattr(room2, 'id', 2)
-                return [room1, room2]
-            return []
+        # 1. Operating room utilization
+        scores["or_utilization"] = self._calculate_or_utilization(solution, schedule_start_time, schedule_end_time)
 
-    class MockSurgeon:
-        def __init__(self, surgeon_id, name="Test Surgeon"):
-            self.surgeon_id = surgeon_id
-            self.name = name
+        # 2. Sequence-dependent setup time
+        scores["sds_time_penalty"] = self._calculate_sds_time(solution)
 
-    class MockSurgery:
-        def __init__(self, surgery_id, duration_minutes, urgency_level="Medium", surgeon_id=None):
-            self.surgery_id = surgery_id
-            self.duration_minutes = duration_minutes
-            self.urgency_level = urgency_level
-            self.surgeon_id = surgeon_id
-            self.surgeon = MockSurgeon(surgeon_id=surgeon_id) if surgeon_id else None
+        # 3. Surgeon preference satisfaction
+        scores["surgeon_preference_satisfaction"] = self._calculate_surgeon_preference_satisfaction(solution)
 
-    class MockOperatingRoom:
-        def __init__(self, room_id, location="Test Room"):
-            self.room_id = room_id
-            self.location = location
+        # 4. Workload balance
+        scores["workload_balance"] = self._calculate_workload_balance(solution)
 
-    class MockSurgeryRoomAssignment:
-        def __init__(self, surgery, room, start_time, end_time):
-            self.surgery = surgery
-            self.room = room
-            self.start_time = start_time
-            self.end_time = end_time
+        # 5. Patient wait time
+        scores["patient_wait_time"] = self._calculate_patient_wait_time(solution)
 
-    mock_db_session = MockDBSession()
-    evaluator = SolutionEvaluator(db_session=mock_db_session)
+        # 6. Emergency surgery priority
+        scores["emergency_surgery_priority"] = self._calculate_emergency_priority(solution)
 
-    # Define a schedule window
-    schedule_start = datetime(2023, 1, 1, 8, 0, 0)  # 8 AM
-    schedule_end = datetime(2023, 1, 1, 17, 0, 0)   # 5 PM
+        # 7. Operational cost
+        scores["operational_cost"] = self._calculate_operational_cost(solution)
 
-    # Create some mock SurgeryRoomAssignment objects
-    surgery1 = MockSurgery(surgery_id="S1", duration_minutes=120, urgency_level="High", surgeon_id="DR1")
-    room1 = MockOperatingRoom(room_id=1)
-    assignment1_start = datetime(2023, 1, 1, 9, 0, 0)
-    assignment1_end = datetime(2023, 1, 1, 11, 0, 0)
-    assignment1 = MockSurgeryRoomAssignment(surgery1, room1, assignment1_start, assignment1_end)
+        # 8. Staff overtime
+        scores["staff_overtime"] = self._calculate_staff_overtime(solution, schedule_start_time, schedule_end_time)
 
-    surgery2 = MockSurgery(surgery_id="S2", duration_minutes=90, urgency_level="Medium", surgeon_id="DR2")
-    room2 = MockOperatingRoom(room_id=2)
-    assignment2_start = datetime(2023, 1, 1, 10, 0, 0)
-    assignment2_end = datetime(2023, 1, 1, 11, 30, 0)
-    assignment2 = MockSurgeryRoomAssignment(surgery2, room2, assignment2_start, assignment2_end)
+        # Calculate total score
+        total_score = 0
+        for criterion, score in scores.items():
+            weighted_score = self.weights.get(criterion, 0) * score
+            total_score += weighted_score
+            logger.debug(f"{criterion}: {score:.4f} * {self.weights.get(criterion, 0):.2f} = {weighted_score:.4f}")
 
-    surgery3 = MockSurgery(surgery_id="S3", duration_minutes=180, urgency_level="Low", surgeon_id="DR1")
-    # room1 again, but later
-    assignment3_start = datetime(2023, 1, 1, 13, 0, 0)
-    assignment3_end = datetime(2023, 1, 1, 16, 0, 0)
-    assignment3 = MockSurgeryRoomAssignment(surgery3, room1, assignment3_start, assignment3_end)
+        logger.info(f"Total evaluation score: {total_score:.4f}")
+        return total_score
 
+    def _calculate_or_utilization(self, solution, schedule_start_time, schedule_end_time):
+        """
+        Calculate operating room utilization.
 
-    mock_assignments = [assignment1, assignment2, assignment3]
+        Args:
+            solution: List of SurgeryRoomAssignment objects
+            schedule_start_time: Start time of the schedule window
+            schedule_end_time: End time of the schedule window
 
-    # Mock surgeon preferences (needed by PreferenceSatisfactionCalculator)
-    # This part would typically involve the calculator fetching from db_session or being passed a map
-    # For this example, let's assume get_surgeon_preferences in the calculator is mocked or works with this session
-    class MockSurgeonPreference:
-        def __init__(self, surgeon_id, preference_type, preference_value):
-            self.surgeon_id = surgeon_id
-            self.preference_type = preference_type
-            self.preference_value = preference_value
+        Returns:
+            OR utilization score (0-1, higher is better)
+        """
+        # Get all operating rooms
+        if self.db_session:
+            rooms = list(self.rooms_cache.values())
+            if not rooms:
+                rooms = self.db_session.query(OperatingRoom).all()
+                self.rooms_cache = {room.room_id: room for room in rooms}
+        else:
+            # Extract unique room IDs from solution
+            room_ids = set(a.room_id for a in solution)
+            rooms = [{"room_id": room_id} for room_id in room_ids]
 
-    # Patching the db_session.query for SurgeonPreference if needed by the calculator
-    original_query_method = mock_db_session.query
-    def extended_mock_query(model):
-        if model == SurgeonPreference:
-            # dr_A prefers Monday, OR1
-            # dr_B prefers Tuesday
-            return [
-                MockSurgeonPreference(surgeon_id="DR1", preference_type="day_of_week", preference_value=assignment1_start.strftime("%A")),
-                MockSurgeonPreference(surgeon_id="DR1", preference_type="room_id", preference_value=str(room1.room_id)), # ensure type match
-                MockSurgeonPreference(surgeon_id="DR2", preference_type="day_of_week", preference_value=assignment2_start.strftime("%A")),
-            ]
-        elif model == OperatingRoom:
-             return original_query_method(model) # Call original for ORs
-        return []
-    mock_db_session.query = extended_mock_query
+        # Calculate total available time across all rooms
+        schedule_duration = (schedule_end_time - schedule_start_time).total_seconds() / 60  # in minutes
+        total_available_time = schedule_duration * len(rooms)
 
+        # Calculate total used time
+        total_used_time = 0
+        for assignment in solution:
+            if assignment.start_time and assignment.end_time:
+                duration = (assignment.end_time - assignment.start_time).total_seconds() / 60
+                total_used_time += duration
 
-    total_score = evaluator.evaluate_solution(mock_assignments, schedule_start, schedule_end)
-    print(f"\nExample Usage Total Objective Score: {total_score:.4f}")
+        # Calculate utilization
+        if total_available_time > 0:
+            utilization = total_used_time / total_available_time
+            logger.debug(f"OR utilization: {utilization:.2%} ({total_used_time:.0f}/{total_available_time:.0f} minutes)")
+            return utilization
+        else:
+            logger.warning("Total available time is zero, cannot calculate OR utilization")
+            return 0
 
-    # basic_score = evaluator._basic_evaluate_solution(mock_assignments, schedule_start, schedule_end)
-    # print(f"Example Usage Basic Score: {basic_score:.4f}")
+    def _calculate_sds_time(self, solution):
+        """
+        Calculate sequence-dependent setup time penalty.
 
-    # if isinstance(mock_db_session, SessionLocal):
-    #     mock_db_session.close()
+        Args:
+            solution: List of SurgeryRoomAssignment objects
+
+        Returns:
+            SDST penalty score (normalized, lower is better)
+        """
+        if not self.sds_times_data:
+            logger.debug("No SDST data available, skipping SDST calculation")
+            return 0
+
+        # Group assignments by room
+        room_assignments = {}
+        for assignment in solution:
+            if assignment.room_id not in room_assignments:
+                room_assignments[assignment.room_id] = []
+            room_assignments[assignment.room_id].append(assignment)
+
+        # Sort assignments in each room by start time
+        for room_id, assignments in room_assignments.items():
+            assignments.sort(key=lambda a: a.start_time)
+
+        # Calculate total SDST
+        total_sds_time = 0
+        for room_id, assignments in room_assignments.items():
+            for i in range(1, len(assignments)):
+                prev_assignment = assignments[i-1]
+                curr_assignment = assignments[i]
+
+                # Get surgery type IDs
+                prev_surgery_id = prev_assignment.surgery_id
+                curr_surgery_id = curr_assignment.surgery_id
+
+                prev_surgery = None
+                curr_surgery = None
+
+                # Try to get surgeries from cache or database
+                if self.db_session:
+                    prev_surgery = self.surgeries_cache.get(prev_surgery_id)
+                    if not prev_surgery:
+                        prev_surgery = self.db_session.query(Surgery).filter_by(surgery_id=prev_surgery_id).first()
+                        if prev_surgery:
+                            self.surgeries_cache[prev_surgery_id] = prev_surgery
+
+                    curr_surgery = self.surgeries_cache.get(curr_surgery_id)
+                    if not curr_surgery:
+                        curr_surgery = self.db_session.query(Surgery).filter_by(surgery_id=curr_surgery_id).first()
+                        if curr_surgery:
+                            self.surgeries_cache[curr_surgery_id] = curr_surgery
+
+                # Skip if we can't get surgery type IDs
+                if not prev_surgery or not curr_surgery:
+                    continue
+
+                prev_type_id = getattr(prev_surgery, 'surgery_type_id', None)
+                curr_type_id = getattr(curr_surgery, 'surgery_type_id', None)
+
+                if prev_type_id is not None and curr_type_id is not None:
+                    # Get SDST from data
+                    sds_time = self.sds_times_data.get((prev_type_id, curr_type_id), 15)  # Default to 15 minutes
+                    total_sds_time += sds_time
+
+        # Normalize SDST penalty (assuming max 30 minutes per transition, max 10 transitions)
+        max_expected_sds_time = 30 * 10
+        normalized_penalty = min(1.0, total_sds_time / max_expected_sds_time)
+
+        logger.debug(f"Total SDST: {total_sds_time} minutes, normalized penalty: {normalized_penalty:.4f}")
+        return normalized_penalty
+
+    def _calculate_surgeon_preference_satisfaction(self, solution):
+        """
+        Calculate surgeon preference satisfaction.
+
+        Args:
+            solution: List of SurgeryRoomAssignment objects
+
+        Returns:
+            Preference satisfaction score (0-1, higher is better)
+        """
+        if not self.db_session:
+            logger.debug("No database session available, skipping surgeon preference calculation")
+            return 0.5  # Neutral score
+
+        total_preferences = 0
+        satisfied_preferences = 0
+
+        for assignment in solution:
+            # Get the surgery
+            surgery_id = assignment.surgery_id
+            surgery = self.surgeries_cache.get(surgery_id)
+            if not surgery:
+                surgery = self.db_session.query(Surgery).filter_by(surgery_id=surgery_id).first()
+                if surgery:
+                    self.surgeries_cache[surgery_id] = surgery
+
+            if not surgery:
+                continue
+
+            # Get the surgeon
+            surgeon_id = getattr(surgery, 'surgeon_id', None)
+            if not surgeon_id:
+                continue
+
+            # Get surgeon preferences
+            preferences = self.surgeon_preferences_cache.get(surgeon_id, [])
+            if not preferences:
+                preferences = self.db_session.query(SurgeonPreference).filter_by(surgeon_id=surgeon_id).all()
+                self.surgeon_preferences_cache[surgeon_id] = preferences
+
+            for pref in preferences:
+                total_preferences += 1
+
+                # Check if preference is satisfied
+                if pref.preference_type == 'room_id' and str(assignment.room_id) == pref.preference_value:
+                    satisfied_preferences += 1
+                elif pref.preference_type == 'day_of_week' and assignment.start_time.strftime('%A') == pref.preference_value:
+                    satisfied_preferences += 1
+                elif pref.preference_type == 'time_of_day':
+                    hour = assignment.start_time.hour
+                    if (pref.preference_value == 'morning' and 8 <= hour < 12) or \
+                       (pref.preference_value == 'afternoon' and 12 <= hour < 17) or \
+                       (pref.preference_value == 'evening' and 17 <= hour < 20):
+                        satisfied_preferences += 1
+
+        # Calculate satisfaction rate
+        if total_preferences > 0:
+            satisfaction_rate = satisfied_preferences / total_preferences
+            logger.debug(f"Surgeon preference satisfaction: {satisfaction_rate:.2%} ({satisfied_preferences}/{total_preferences})")
+            return satisfaction_rate
+        else:
+            logger.debug("No surgeon preferences found")
+            return 1.0  # If no preferences, consider them all satisfied
+
+    def _calculate_workload_balance(self, solution):
+        """
+        Calculate workload balance among surgeons.
+
+        Args:
+            solution: List of SurgeryRoomAssignment objects
+
+        Returns:
+            Workload balance score (0-1, higher is better)
+        """
+        # Group surgeries by surgeon
+        surgeon_workloads = {}
+
+        for assignment in solution:
+            # Get the surgery
+            surgery_id = assignment.surgery_id
+            surgery = None
+
+            if self.db_session:
+                surgery = self.surgeries_cache.get(surgery_id)
+                if not surgery:
+                    surgery = self.db_session.query(Surgery).filter_by(surgery_id=surgery_id).first()
+                    if surgery:
+                        self.surgeries_cache[surgery_id] = surgery
+
+            if not surgery:
+                continue
+
+            # Get the surgeon
+            surgeon_id = getattr(surgery, 'surgeon_id', None)
+            if not surgeon_id:
+                continue
+
+            # Calculate duration
+            if assignment.start_time and assignment.end_time:
+                duration = (assignment.end_time - assignment.start_time).total_seconds() / 60
+
+                if surgeon_id not in surgeon_workloads:
+                    surgeon_workloads[surgeon_id] = 0
+                surgeon_workloads[surgeon_id] += duration
+
+        # Calculate workload balance
+        if len(surgeon_workloads) <= 1:
+            logger.debug("Only one or zero surgeons in the solution, perfect balance")
+            return 1.0  # Perfect balance with only one surgeon
+
+        # Calculate standard deviation of workloads
+        workloads = list(surgeon_workloads.values())
+        mean_workload = sum(workloads) / len(workloads)
+        variance = sum((w - mean_workload) ** 2 for w in workloads) / len(workloads)
+        std_dev = variance ** 0.5
+
+        # Normalize to a 0-1 score (higher is better)
+        # Assuming max reasonable std_dev is mean_workload
+        if mean_workload > 0:
+            normalized_balance = 1.0 - min(1.0, std_dev / mean_workload)
+        else:
+            normalized_balance = 1.0
+
+        logger.debug(f"Workload balance: {normalized_balance:.4f} (std_dev: {std_dev:.0f}, mean: {mean_workload:.0f})")
+        return normalized_balance
+
+    def _calculate_patient_wait_time(self, solution):
+        """
+        Calculate patient wait time penalty.
+
+        Args:
+            solution: List of SurgeryRoomAssignment objects
+
+        Returns:
+            Wait time penalty score (0-1, lower is better)
+        """
+        # For a complete implementation, we would need request dates for surgeries
+        # For now, use a simplified approach based on urgency levels
+
+        if not self.db_session:
+            logger.debug("No database session available, skipping patient wait time calculation")
+            return 0.5  # Neutral score
+
+        total_wait_score = 0
+        count = 0
+
+        for assignment in solution:
+            # Get the surgery
+            surgery_id = assignment.surgery_id
+            surgery = self.surgeries_cache.get(surgery_id)
+            if not surgery:
+                surgery = self.db_session.query(Surgery).filter_by(surgery_id=surgery_id).first()
+                if surgery:
+                    self.surgeries_cache[surgery_id] = surgery
+
+            if not surgery:
+                continue
+
+            # Get urgency level
+            urgency_level = getattr(surgery, 'urgency_level', 'Medium')
+
+            # Calculate wait time score based on urgency and time of day
+            # Higher urgency should be scheduled earlier in the day
+            hour = assignment.start_time.hour
+
+            if urgency_level == 'High':
+                # High urgency surgeries should be early in the day
+                wait_score = hour / 24.0  # 0 for midnight, 0.5 for noon
+            elif urgency_level == 'Medium':
+                # Medium urgency is neutral
+                wait_score = 0.5
+            else:  # Low urgency
+                # Low urgency surgeries can be later in the day
+                wait_score = 1.0 - (hour / 24.0)  # Higher score for later hours
+
+            total_wait_score += wait_score
+            count += 1
+
+        # Calculate average wait score
+        if count > 0:
+            avg_wait_score = total_wait_score / count
+            logger.debug(f"Patient wait time score: {avg_wait_score:.4f}")
+            return avg_wait_score
+        else:
+            logger.debug("No valid surgeries for wait time calculation")
+            return 0.5  # Neutral score
+
+    def _calculate_emergency_priority(self, solution):
+        """
+        Calculate emergency surgery priority score.
+
+        Args:
+            solution: List of SurgeryRoomAssignment objects
+
+        Returns:
+            Emergency priority score (0-1, higher is better)
+        """
+        if not self.db_session:
+            logger.debug("No database session available, skipping emergency priority calculation")
+            return 0.5  # Neutral score
+
+        # Map urgency levels to priority scores
+        urgency_scores = {
+            'High': 1.0,
+            'Medium': 0.5,
+            'Low': 0.0
+        }
+
+        total_score = 0
+        count = 0
+
+        for assignment in solution:
+            # Get the surgery
+            surgery_id = assignment.surgery_id
+            surgery = self.surgeries_cache.get(surgery_id)
+            if not surgery:
+                surgery = self.db_session.query(Surgery).filter_by(surgery_id=surgery_id).first()
+                if surgery:
+                    self.surgeries_cache[surgery_id] = surgery
+
+            if not surgery:
+                continue
+
+            # Get urgency level
+            urgency_level = getattr(surgery, 'urgency_level', 'Medium')
+
+            # Calculate priority score
+            # Higher urgency surgeries should be scheduled earlier in the day
+            hour = assignment.start_time.hour
+            base_score = urgency_scores.get(urgency_level, 0.5)
+
+            # Adjust score based on time of day (earlier is better for high urgency)
+            if urgency_level == 'High':
+                time_factor = max(0, 1.0 - (hour / 12.0))  # 1.0 at midnight, 0.0 at noon or later
+                priority_score = base_score * (0.5 + 0.5 * time_factor)  # Weighted average
+            else:
+                priority_score = base_score
+
+            total_score += priority_score
+            count += 1
+
+        # Calculate average priority score
+        if count > 0:
+            avg_priority_score = total_score / count
+            logger.debug(f"Emergency priority score: {avg_priority_score:.4f}")
+            return avg_priority_score
+        else:
+            logger.debug("No valid surgeries for emergency priority calculation")
+            return 0.5  # Neutral score
+
+    def _calculate_operational_cost(self, solution):
+        """
+        Calculate operational cost penalty.
+
+        Args:
+            solution: List of SurgeryRoomAssignment objects
+
+        Returns:
+            Operational cost penalty score (0-1, lower is better)
+        """
+        # For a complete implementation, we would need cost data for rooms, equipment, etc.
+        # For now, use a simplified approach based on room utilization
+
+        # Group assignments by room
+        room_utilization = {}
+
+        for assignment in solution:
+            room_id = assignment.room_id
+
+            if room_id not in room_utilization:
+                room_utilization[room_id] = 0
+
+            if assignment.start_time and assignment.end_time:
+                duration = (assignment.end_time - assignment.start_time).total_seconds() / 60
+                room_utilization[room_id] += duration
+
+        # Calculate cost based on utilization (more balanced utilization is better)
+        if not room_utilization:
+            logger.debug("No room utilization data available")
+            return 0.5  # Neutral score
+
+        # Calculate standard deviation of utilization
+        utilizations = list(room_utilization.values())
+        mean_utilization = sum(utilizations) / len(utilizations)
+
+        if mean_utilization == 0:
+            logger.debug("Zero mean utilization")
+            return 0.5  # Neutral score
+
+        variance = sum((u - mean_utilization) ** 2 for u in utilizations) / len(utilizations)
+        std_dev = variance ** 0.5
+
+        # Normalize to a 0-1 score (lower is better for cost)
+        normalized_cost = min(1.0, std_dev / mean_utilization)
+
+        logger.debug(f"Operational cost score: {normalized_cost:.4f}")
+        return normalized_cost
+
+    def _calculate_staff_overtime(self, solution, schedule_start_time, schedule_end_time):
+        """
+        Calculate staff overtime penalty.
+
+        Args:
+            solution: List of SurgeryRoomAssignment objects
+            schedule_start_time: Start time of the schedule window
+            schedule_end_time: End time of the schedule window
+
+        Returns:
+            Overtime penalty score (0-1, lower is better)
+        """
+        # Define normal working hours (e.g., 8:00 AM to 5:00 PM)
+        normal_start_hour = 8
+        normal_end_hour = 17
+
+        total_overtime_minutes = 0
+
+        for assignment in solution:
+            if not assignment.start_time or not assignment.end_time:
+                continue
+
+            # Check if assignment extends beyond normal hours
+            day_start = assignment.start_time.replace(hour=normal_start_hour, minute=0, second=0, microsecond=0)
+            day_end = assignment.start_time.replace(hour=normal_end_hour, minute=0, second=0, microsecond=0)
+
+            # Calculate overtime before normal hours
+            if assignment.start_time < day_start:
+                early_overtime = (day_start - assignment.start_time).total_seconds() / 60
+                total_overtime_minutes += early_overtime
+
+            # Calculate overtime after normal hours
+            if assignment.end_time > day_end:
+                late_overtime = (assignment.end_time - day_end).total_seconds() / 60
+                total_overtime_minutes += late_overtime
+
+        # Normalize overtime penalty (assuming max 8 hours of overtime)
+        max_expected_overtime = 8 * 60  # 8 hours in minutes
+        normalized_penalty = min(1.0, total_overtime_minutes / max_expected_overtime)
+
+        logger.debug(f"Staff overtime: {total_overtime_minutes:.0f} minutes, normalized penalty: {normalized_penalty:.4f}")
+        return normalized_penalty

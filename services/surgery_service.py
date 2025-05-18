@@ -12,17 +12,17 @@ logger = logging.getLogger(__name__)
 class SurgeryService:
     """Provides services for managing surgeries."""
 
-    def __init__(self):
-        self.calendar_service = CalendarService()
+    def __init__(self, testing=False):
+        self.calendar_service = CalendarService(testing=testing)
 
     @staticmethod
     def create_surgery(db, surgery_data):
         """Creates a new surgery record in the database."""
         try:
             new_surgery = Surgery(
-                patient_id=surgery_data["patient_id"],
+                patient_id=surgery_data.get("patient_id"),
                 scheduled_date=surgery_data["scheduled_date"],
-                surgery_type=surgery_data["surgery_type"],
+                surgery_type_id=surgery_data.get("surgery_type_id"),
                 urgency_level=surgery_data["urgency_level"],
                 duration_minutes=surgery_data["duration_minutes"],
                 status=surgery_data.get("status", "Scheduled"),

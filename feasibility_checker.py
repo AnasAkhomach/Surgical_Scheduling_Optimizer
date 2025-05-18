@@ -1,465 +1,488 @@
-# This file will contain the logic for checking schedule feasibility.
+"""
+Feasibility checker for surgery scheduling.
+
+This module provides a comprehensive feasibility checker that works with the full models
+and checks all constraints for surgery scheduling.
+"""
+
 import logging
 from datetime import datetime, timedelta
-import json # For parsing equipment requirements if stored as JSON string
-from models import Surgery, SurgeryRoomAssignment, SurgeryEquipment, SurgeryEquipmentUsage # Assuming models.py is accessible
+from typing import List, Dict, Any, Optional, Union
+from sqlalchemy.orm import Session
+
+from models import (
+    Surgery,
+    OperatingRoom,
+    Surgeon,
+    SurgeryEquipment,
+    SurgeryRoomAssignment,
+    SurgeryEquipmentUsage,
+    SurgeryType,
+    SurgeonPreference,
+    SurgeonAvailability,
+    OperatingRoomEquipment
+)
 
 logger = logging.getLogger(__name__)
 
-# Define critical equipment inventory at the module level or pass it to the class
-CRITICAL_EQUIPMENT_INVENTORY = {
-    "Da Vinci Robotic System": 1,
-    "Intraoperative MRI": 1,
-    "Advanced Navigation System": 2,
-    "Specialized Cardiac Bypass Machine": 2,
-    "Neurosurgical Navigation System": 1,
-    "Specialized Orthopedic Drill Set": 3,
-    "Specialized Laparoscopic Equipment": 4,
-    "Specialized Ophthalmic Microscope": 2,
-}
-
 class FeasibilityChecker:
-    def __init__(self, db_session, surgeries_data, operating_rooms_data, all_surgery_equipments_data):
+    """
+    Feasibility checker for surgery scheduling.
+
+    This class checks all constraints for surgery scheduling, including:
+    - Surgeon availability
+    - Equipment availability
+    - Room availability
+    - Room suitability for surgery type
+    - Sequence-dependent setup times
+    - Patient constraints
+    """
+
+    def __init__(self, db_session: Optional[Session] = None):
+        """
+        Initialize the feasibility checker.
+
+        Args:
+            db_session: Database session for querying data
+        """
         self.db_session = db_session
-        self.surgeries_data = surgeries_data # Full list of Surgery objects/data
-        self.operating_rooms_data = operating_rooms_data # Full list of OR objects/data
-        self.all_surgery_equipments_data = all_surgery_equipments_data # Full list of SurgeryEquipment objects/data
-        logger.info("FeasibilityChecker initialized.")
+        self.surgeries_cache = {}
+        self.surgeons_cache = {}
+        self.rooms_cache = {}
+        self.equipment_cache = {}
+        self.surgery_types_cache = {}
+        self.surgeon_preferences_cache = {}
+        self.surgeon_availability_cache = {}
+        self.room_equipment_cache = {}
+
+        # Load data into cache if db_session is provided
+        if self.db_session:
+            self._load_cache_data()
+
+    def _load_cache_data(self):
+        """Load data from database into cache for faster access."""
+        try:
+            # Load surgeries
+            surgeries = self.db_session.query(Surgery).all()
+            self.surgeries_cache = {surgery.surgery_id: surgery for surgery in surgeries}
+
+            # Load surgeons
+            surgeons = self.db_session.query(Surgeon).all()
+            self.surgeons_cache = {surgeon.surgeon_id: surgeon for surgeon in surgeons}
+
+            # Load operating rooms
+            rooms = self.db_session.query(OperatingRoom).all()
+            self.rooms_cache = {room.room_id: room for room in rooms}
+
+            # Load equipment
+            equipment = self.db_session.query(SurgeryEquipment).all()
+            self.equipment_cache = {equip.equipment_id: equip for equip in equipment}
+
+            # Load surgery types
+            surgery_types = self.db_session.query(SurgeryType).all()
+            self.surgery_types_cache = {st.surgery_type_id: st for st in surgery_types}
+
+            # Load surgeon preferences
+            surgeon_prefs = self.db_session.query(SurgeonPreference).all()
+            self.surgeon_preferences_cache = {}
+            for pref in surgeon_prefs:
+                if pref.surgeon_id not in self.surgeon_preferences_cache:
+                    self.surgeon_preferences_cache[pref.surgeon_id] = []
+                self.surgeon_preferences_cache[pref.surgeon_id].append(pref)
+
+            # Load surgeon availability
+            surgeon_avail = self.db_session.query(SurgeonAvailability).all()
+            self.surgeon_availability_cache = {}
+            for avail in surgeon_avail:
+                if avail.surgeon_id not in self.surgeon_availability_cache:
+                    self.surgeon_availability_cache[avail.surgeon_id] = []
+                self.surgeon_availability_cache[avail.surgeon_id].append(avail)
+
+            # Load room equipment
+            room_equip = self.db_session.query(OperatingRoomEquipment).all()
+            self.room_equipment_cache = {}
+            for re in room_equip:
+                if re.room_id not in self.room_equipment_cache:
+                    self.room_equipment_cache[re.room_id] = []
+                self.room_equipment_cache[re.room_id].append(re)
+
+            logger.info("Cache data loaded successfully")
+        except Exception as e:
+            logger.error(f"Error loading cache data: {e}")
 
     def is_surgeon_available(
         self,
-        surgeon_id,
-        start_time_str,
-        end_time_str,
-        current_schedule_assignments, # Pass current assignments for this check
-        current_surgery_id_to_ignore=None,
-    ):
-        """Checks if a surgeon is available during the given time slot, optionally ignoring a specific surgery."""
-        try:
-            proposed_start_dt = datetime.fromisoformat(start_time_str)
-            proposed_end_dt = datetime.fromisoformat(end_time_str)
-        except ValueError as e:
-            logger.error("Invalid time format for surgeon availability check: %s", e)
-            return False
+        surgeon_id: int,
+        start_time: datetime,
+        end_time: datetime,
+        current_assignments: List[SurgeryRoomAssignment],
+        surgery_id_to_ignore: Optional[int] = None
+    ) -> bool:
+        """
+        Check if a surgeon is available during the given time slot.
 
-        for assignment_obj in current_schedule_assignments: # assignment_obj is a SurgeryRoomAssignment instance
-            assignment_surgery_id = assignment_obj.surgery_id
-            assigned_start_dt = assignment_obj.start_time # This is now a datetime object
-            assigned_end_dt = assignment_obj.end_time   # This is now a datetime object
+        Args:
+            surgeon_id: ID of the surgeon to check
+            start_time: Start time of the slot
+            end_time: End time of the slot
+            current_assignments: List of current assignments to check against
+            surgery_id_to_ignore: ID of a surgery to ignore in the check
 
-            if not all([assignment_surgery_id, assigned_start_dt, assigned_end_dt]):
-                logger.warning(f"Skipping malformed in-memory assignment (missing data): {assignment_obj}")
-                continue
-
-            if not isinstance(assigned_start_dt, datetime) or not isinstance(assigned_end_dt, datetime):
-                logger.warning(f"Skipping in-memory assignment for surgery {assignment_surgery_id} due to invalid datetime types: start={type(assigned_start_dt)}, end={type(assigned_end_dt)}")
-                continue
-
-            if (
-                current_surgery_id_to_ignore
-                and str(assignment_surgery_id) == str(current_surgery_id_to_ignore)
-            ):
-                logger.debug(
-                    "Ignoring surgery %s for surgeon %s availability check (currently being modified).",
-                    current_surgery_id_to_ignore,
-                    surgeon_id,
-                )
-                continue
-
-            # Find the surgery details from self.surgeries_data using assignment_surgery_id
-            surgery_details = next((
-                s for s in self.surgeries_data if str(getattr(s, 'id', getattr(s, 'surgery_id', None))) == str(assignment_surgery_id)
-            ), None)
-
-            if surgery_details and str(getattr(surgery_details, "surgeon_id", None)) == str(surgeon_id):
-                # assigned_start_dt and assigned_end_dt are already datetime objects
-                if (
-                    proposed_start_dt < assigned_end_dt
-                    and assigned_start_dt < proposed_end_dt
-                ):
-                    logger.debug(
-                        "Surgeon %s is busy with in-memory surgery %s (%s-%s) during proposed slot (%s-%s).",
-                        surgeon_id,
-                        assignment_surgery_id,
-                        assigned_start_dt.isoformat(),
-                        assigned_end_dt.isoformat(),
-                        proposed_start_dt.isoformat(),
-                        proposed_end_dt.isoformat(),
-                    )
-                    return False
-            # No ValueError expected here for time parsing as they are already datetime objects
-
+        Returns:
+            True if the surgeon is available, False otherwise
+        """
+        # Check if surgeon exists
         if self.db_session:
-            try:
-                overlapping_db_query = (
-                    self.db_session.query(SurgeryRoomAssignment)
-                    .join(Surgery, Surgery.surgery_id == SurgeryRoomAssignment.surgery_id)
-                    .filter(Surgery.surgeon_id == surgeon_id)
-                    .filter(
-                        SurgeryRoomAssignment.start_time < proposed_end_dt,
-                        SurgeryRoomAssignment.end_time > proposed_start_dt,
-                    )
-                )
-                if current_surgery_id_to_ignore:
-                    overlapping_db_query = overlapping_db_query.filter(
-                        SurgeryRoomAssignment.surgery_id != current_surgery_id_to_ignore
-                    )
-                db_conflicts = overlapping_db_query.all()
-                if db_conflicts:
-                    logger.debug(
-                        "Surgeon %s is busy with existing DB assignments during proposed slot %s - %s.",
-                        surgeon_id, proposed_start_dt.isoformat(), proposed_end_dt.isoformat()
-                    )
-                    for db_assign in db_conflicts:
-                        logger.debug(
-                            "  - Overlapping DB assignment: Surgery %s, Room %s, Time %s-%s",
-                            db_assign.surgery_id,
-                            db_assign.room_id,
-                            db_assign.start_time.isoformat() if isinstance(db_assign.start_time, datetime) else db_assign.start_time,
-                            db_assign.end_time.isoformat() if isinstance(db_assign.end_time, datetime) else db_assign.end_time,
-                        )
-                    return False
-            except Exception as e:
-                logger.error("Error querying DB for surgeon %s availability: %s", surgeon_id, e)
-                return False # Safer to assume unavailable
+            surgeon = self.surgeons_cache.get(surgeon_id)
+            if not surgeon:
+                surgeon = self.db_session.query(Surgeon).filter_by(surgeon_id=surgeon_id).first()
+                if surgeon:
+                    self.surgeons_cache[surgeon_id] = surgeon
 
-        logger.debug("Surgeon %s is available for %s to %s.", surgeon_id, start_time_str, end_time_str)
-        return True
-
-    def _get_required_equipment_for_surgery(self, surgery_obj):
-        """Determines what equipment is required for a given surgery."""
-        required_equipment = {}
-        surgery_type = getattr(surgery_obj, "surgery_type", "Unknown")
-
-        if surgery_type == "Robotic Prostatectomy":
-            required_equipment["Da Vinci Robotic System"] = 1
-            required_equipment["Specialized Laparoscopic Equipment"] = 1
-        elif surgery_type == "Complex Brain Tumor Resection":
-            required_equipment["Intraoperative MRI"] = 1
-            required_equipment["Advanced Navigation System"] = 1
-            required_equipment["Neurosurgical Navigation System"] = 1
-        elif surgery_type == "Cardiac Bypass":
-            required_equipment["Specialized Cardiac Bypass Machine"] = 1
-        elif surgery_type == "Joint Replacement":
-            required_equipment["Specialized Orthopedic Drill Set"] = 1
-        elif surgery_type == "Cataract Surgery":
-            required_equipment["Specialized Ophthalmic Microscope"] = 1
-        elif surgery_type == "Laparoscopic Cholecystectomy":
-            required_equipment["Specialized Laparoscopic Equipment"] = 1
-
-        if hasattr(surgery_obj, "is_minimally_invasive") and surgery_obj.is_minimally_invasive:
-            required_equipment["Specialized Laparoscopic Equipment"] = (
-                required_equipment.get("Specialized Laparoscopic Equipment", 0) + 1
-            )
-
-        if hasattr(surgery_obj, "required_equipment") and surgery_obj.required_equipment:
-            try:
-                if isinstance(surgery_obj.required_equipment, dict):
-                    return surgery_obj.required_equipment # Overwrites previous logic if present
-                elif isinstance(surgery_obj.required_equipment, str):
-                    return json.loads(surgery_obj.required_equipment) # Overwrites
-            except Exception as e:
-                logger.error(
-                    f"Error parsing required_equipment JSON for surgery {getattr(surgery_obj, 'id', 'N/A')}: {e}"
-                )
-        return required_equipment
-
-    def _calculate_concurrent_equipment_usage(
-        self, equipment_name, start_dt, end_dt, current_schedule_assignments, exclude_surgery_id=None
-    ):
-        """Calculates how many units of a specific equipment are in use during a given time slot."""
-        concurrent_usage_count = 0
-        # Check in-memory assignments
-        for assignment_obj in current_schedule_assignments: # assignment_obj is a SurgeryRoomAssignment instance
-            assignment_surgery_id = assignment_obj.surgery_id
-            assigned_start_dt = assignment_obj.start_time # This is now a datetime object
-            assigned_end_dt = assignment_obj.end_time   # This is now a datetime object
-
-            if not all([assignment_surgery_id, assigned_start_dt, assigned_end_dt]):
-                logger.warning(f"Skipping malformed in-memory assignment (missing data) for equipment check: {assignment_obj}")
-                continue
-
-            if not isinstance(assigned_start_dt, datetime) or not isinstance(assigned_end_dt, datetime):
-                logger.warning(f"Skipping in-memory assignment for surgery {assignment_surgery_id} during equipment check due to invalid datetime types: start={type(assigned_start_dt)}, end={type(assigned_end_dt)}")
-                continue
-
-            if exclude_surgery_id and str(assignment_surgery_id) == str(exclude_surgery_id):
-                continue
-
-            # Find the surgery details from self.surgeries_data using assignment_surgery_id
-            assigned_surgery_details = next((
-                s for s in self.surgeries_data if str(getattr(s, 'id', getattr(s, 'surgery_id', None))) == str(assignment_surgery_id)
-            ), None)
-            if not assigned_surgery_details: continue
-
-            assigned_required_equipment = self._get_required_equipment_for_surgery(assigned_surgery_details)
-            if equipment_name not in assigned_required_equipment: continue
-
-            # assigned_start_dt and assigned_end_dt are already datetime objects
-            if start_dt < assigned_end_dt and assigned_start_dt < end_dt: # Overlap condition
-                quantity_needed = assigned_required_equipment[equipment_name]
-                concurrent_usage_count += quantity_needed
-
-        # Check DB assignments if db_session is available
-        if self.db_session:
-            try:
-                # Query for SurgeryRoomAssignments that overlap with the proposed time
-                # and require the specific equipment.
-                # This requires joining SurgeryRoomAssignment with Surgery (to get surgery_type or required_equipment field)
-                # and potentially a SurgeryEquipmentLink table if equipment is explicitly linked.
-                # For simplicity, assuming surgery_obj passed to _get_required_equipment_for_surgery has enough info.
-
-                # This is a simplified DB check. A more robust check would involve:
-                # 1. Finding all surgeries in DB overlapping the time slot.
-                # 2. For each, determine its required equipment.
-                # 3. Sum up the usage for 'equipment_name'.
-                # The current self.all_surgery_equipments_data might not be directly usable here without knowing which surgery it belongs to in a schedule.
-                # Let's refine this to query SurgeryRoomAssignment and then get surgery details.
-
-                overlapping_db_assignments = (
-                    self.db_session.query(SurgeryRoomAssignment)
-                    .filter(
-                        SurgeryRoomAssignment.start_time < end_dt,
-                        SurgeryRoomAssignment.end_time > start_dt,
-                    )
-                )
-                if exclude_surgery_id:
-                    overlapping_db_assignments = overlapping_db_assignments.filter(
-                        SurgeryRoomAssignment.surgery_id != exclude_surgery_id
-                    )
-
-                for db_assignment in overlapping_db_assignments.all():
-                    db_surgery_details = next((
-                        s for s in self.surgeries_data if str(getattr(s, 'id', getattr(s, 'surgery_id', None))) == str(db_assignment.surgery_id)
-                    ), None)
-                    if not db_surgery_details: continue
-
-                    db_required_equipment = self._get_required_equipment_for_surgery(db_surgery_details)
-                    if equipment_name in db_required_equipment:
-                        concurrent_usage_count += db_required_equipment[equipment_name]
-
-            except Exception as e:
-                logger.error(f"Error querying DB for equipment {equipment_name} usage: {e}")
-                # Decide how to handle: assume worst case (max usage) or log and continue?
-                # For now, let's assume it contributes to usage to be safe, or return a high number.
-                return float('inf') # Indicates an error and likely unavailability
-
-        return concurrent_usage_count
-
-    def is_equipment_available(
-        self, surgery_obj, start_time_str, end_time_str, current_schedule_assignments, current_surgery_id_to_ignore=None
-    ):
-        """Checks if all required equipment for a surgery is available during the given time slot."""
-        try:
-            proposed_start_dt = datetime.fromisoformat(start_time_str)
-            proposed_end_dt = datetime.fromisoformat(end_time_str)
-        except ValueError as e:
-            logger.error(f"Invalid time format for equipment availability check: {e}")
+        if not surgeon:
+            logger.warning(f"Surgeon {surgeon_id} not found")
             return False
 
-        required_equipment_for_proposed_surgery = self._get_required_equipment_for_surgery(surgery_obj)
-        if not required_equipment_for_proposed_surgery:
-            logger.debug(f"No specific equipment required for surgery {getattr(surgery_obj, 'id', 'N/A')}. Assuming available.")
-            return True # No specific equipment needed
-
-        for equip_name, quantity_needed_for_this_surgery in required_equipment_for_proposed_surgery.items():
-            if equip_name not in CRITICAL_EQUIPMENT_INVENTORY:
-                logger.warning(
-                    f"Equipment '{equip_name}' required by surgery {getattr(surgery_obj, 'id', 'N/A')} is not in CRITICAL_EQUIPMENT_INVENTORY. Assuming available if not critical, or issue if it should be listed."
-                )
-                # Depending on policy, this could be True (if non-critical is assumed available) or False (if all must be tracked)
-                # For now, let's assume if it's not in critical inventory, it's a type we don't track scarcity for, or it's an error in data.
-                # To be safe, if it's requested, it should be in inventory. Let's flag as unavailable if not in inventory.
-                # Update: Let's assume unlisted equipment is infinitely available for now, or handle as per specific project rules.
-                # For this implementation, if it's *required* by a surgery, it *must* be in the inventory to check against.
-                # If it's not in CRITICAL_EQUIPMENT_INVENTORY, we cannot confirm its availability from this list.
-                # This implies a data setup issue or that the equipment is not considered scarce.
-                # Let's assume for now that if it's *critical* and *required*, it must be in the inventory.
-                # If it's required but not in CRITICAL_EQUIPMENT_INVENTORY, we'll log a warning and assume it's available (non-scarce).
-                # This behavior might need refinement based on actual operational rules.
-                logger.warning(f"Equipment '{equip_name}' is required but not found in CRITICAL_EQUIPMENT_INVENTORY. Assuming available (non-scarce). Review if this item should be tracked.")
-                continue # Move to next required equipment item
-
-            total_inventory_for_equip = CRITICAL_EQUIPMENT_INVENTORY.get(equip_name, 0)
-            if total_inventory_for_equip == 0:
-                 logger.warning(f"Equipment '{equip_name}' is listed in inventory with 0 units. Effectively unavailable.")
-                 return False # No units of this equipment available at all
-
-            # Calculate how many units of this equipment are already in use during the proposed slot
-            # Pass current_surgery_id_to_ignore if this check is for modifying an existing surgery's assignment
-            concurrent_usage = self._calculate_concurrent_equipment_usage(
-                equip_name, proposed_start_dt, proposed_end_dt, current_schedule_assignments, exclude_surgery_id=current_surgery_id_to_ignore
-            )
-
-            if concurrent_usage == float('inf'): # Error during DB query for concurrent usage
-                logger.error(f"Could not determine concurrent usage for {equip_name} due to DB error. Assuming unavailable.")
-                return False
-
-            available_units = total_inventory_for_equip - concurrent_usage
-            if available_units < quantity_needed_for_this_surgery:
-                logger.debug(
-                    f"Equipment '{equip_name}' NOT available for surgery {getattr(surgery_obj, 'id', 'N/A')} during {start_time_str} - {end_time_str}. "
-                    f"Required: {quantity_needed_for_this_surgery}, Available: {available_units} (Total: {total_inventory_for_equip}, In Use: {concurrent_usage})"
-                )
-                return False
-            else:
-                logger.debug(
-                    f"Equipment '{equip_name}' IS available for surgery {getattr(surgery_obj, 'id', 'N/A')}. "
-                    f"Required: {quantity_needed_for_this_surgery}, Available: {available_units} (Total: {total_inventory_for_equip}, In Use: {concurrent_usage})"
-                )
-        logger.debug(f"All required equipment available for surgery {getattr(surgery_obj, 'id', 'N/A')} from {start_time_str} to {end_time_str}.")
-        return True
-
-    def is_room_available(
-        self, room_id, start_time_str, end_time_str, current_schedule_assignments, current_surgery_id_to_ignore=None
-    ):
-        """Checks if a specific operating room is available during the given time slot."""
-        try:
-            proposed_start_dt = datetime.fromisoformat(start_time_str)
-            proposed_end_dt = datetime.fromisoformat(end_time_str)
-            if proposed_start_dt >= proposed_end_dt:
-                logger.error(f"Invalid time range for room availability check: start {start_time_str} not before end {end_time_str}.")
-                return False
-        except ValueError as e:
-            logger.error(f"Invalid time format for room availability check: {e}")
+        # Check if surgeon is available (general availability flag)
+        if hasattr(surgeon, 'availability') and not surgeon.availability:
+            logger.info(f"Surgeon {surgeon_id} is marked as unavailable")
             return False
 
-        # Check in-memory assignments
-        for assignment_obj in current_schedule_assignments:
-            if str(getattr(assignment_obj, 'room_id', None)) != str(room_id):
-                continue # Not in the room we are checking
-
-            assignment_surgery_id = assignment_obj.surgery_id
-            assigned_start_dt = assignment_obj.start_time
-            assigned_end_dt = assignment_obj.end_time
-
-            if not all([assignment_surgery_id, assigned_start_dt, assigned_end_dt]):
-                logger.warning(f"Skipping malformed in-memory assignment for room check: {assignment_obj}")
-                continue
-            if not isinstance(assigned_start_dt, datetime) or not isinstance(assigned_end_dt, datetime):
-                logger.warning(f"Skipping in-memory assignment for surgery {assignment_surgery_id} in room check due to invalid datetime types.")
+        # Check for conflicts with existing assignments
+        for assignment in current_assignments:
+            # Skip the assignment we're ignoring
+            if surgery_id_to_ignore and assignment.surgery_id == surgery_id_to_ignore:
                 continue
 
-            if current_surgery_id_to_ignore and str(assignment_surgery_id) == str(current_surgery_id_to_ignore):
-                logger.debug(f"Ignoring surgery {current_surgery_id_to_ignore} for room {room_id} availability check.")
+            # Get the surgery for this assignment
+            surgery = None
+            if hasattr(assignment, 'surgery') and assignment.surgery:
+                surgery = assignment.surgery
+            elif self.db_session:
+                surgery_id = assignment.surgery_id
+                surgery = self.surgeries_cache.get(surgery_id)
+                if not surgery:
+                    surgery = self.db_session.query(Surgery).filter_by(surgery_id=surgery_id).first()
+                    if surgery:
+                        self.surgeries_cache[surgery_id] = surgery
+
+            if not surgery:
+                continue
+
+            # Skip if not the same surgeon
+            if surgery.surgeon_id != surgeon_id:
                 continue
 
             # Check for overlap
-            if proposed_start_dt < assigned_end_dt and assigned_start_dt < proposed_end_dt:
-                logger.debug(
-                    f"Room {room_id} is busy with in-memory surgery {assignment_surgery_id} ({assigned_start_dt.isoformat()}-{assigned_end_dt.isoformat()}) "
-                    f"during proposed slot ({proposed_start_dt.isoformat()}-{proposed_end_dt.isoformat()})."
-                )
+            if (start_time < assignment.end_time and end_time > assignment.start_time):
+                logger.debug(f"Surgeon {surgeon_id} is busy with surgery {surgery.surgery_id} during proposed slot")
                 return False
 
-        # Check database assignments if db_session is available
+        # Check surgeon's specific availability schedule if available
         if self.db_session:
-            try:
-                overlapping_db_query = (
-                    self.db_session.query(SurgeryRoomAssignment)
-                    .filter(SurgeryRoomAssignment.room_id == room_id)
-                    .filter(
-                        SurgeryRoomAssignment.start_time < proposed_end_dt,
-                        SurgeryRoomAssignment.end_time > proposed_start_dt,
-                    )
-                )
-                if current_surgery_id_to_ignore:
-                    overlapping_db_query = overlapping_db_query.filter(
-                        SurgeryRoomAssignment.surgery_id != current_surgery_id_to_ignore
-                    )
-                db_conflicts = overlapping_db_query.all()
-                if db_conflicts:
-                    logger.debug(
-                        f"Room {room_id} is busy with existing DB assignments during proposed slot {proposed_start_dt.isoformat()} - {proposed_end_dt.isoformat()}."
-                    )
-                    for db_assign in db_conflicts:
-                        logger.debug(
-                            f"  - Overlapping DB assignment in Room {room_id}: Surgery {db_assign.surgery_id}, Time {db_assign.start_time.isoformat()}-{db_assign.end_time.isoformat()}"
-                        )
-                    return False
-            except Exception as e:
-                logger.error(f"Error querying DB for room {room_id} availability: {e}")
-                return False # Safer to assume unavailable
+            # Get day of week and time of day
+            day_of_week = start_time.strftime('%A')
+            start_time_of_day = start_time.time()
+            end_time_of_day = end_time.time()
 
-        logger.debug(f"Room {room_id} is available for {start_time_str} to {end_time_str}.")
+            # Check if we have specific availability data
+            availabilities = self.surgeon_availability_cache.get(surgeon_id, [])
+            if not availabilities:
+                availabilities = self.db_session.query(SurgeonAvailability).filter_by(surgeon_id=surgeon_id).all()
+                self.surgeon_availability_cache[surgeon_id] = availabilities
+
+            # If we have specific availability data, check it
+            if availabilities:
+                is_available = False
+                for avail in availabilities:
+                    if avail.day_of_week == day_of_week:
+                        avail_start = datetime.strptime(avail.start_time, '%H:%M').time()
+                        avail_end = datetime.strptime(avail.end_time, '%H:%M').time()
+
+                        # Check if the proposed time slot is within the availability window
+                        if start_time_of_day >= avail_start and end_time_of_day <= avail_end:
+                            is_available = True
+                            break
+
+                if not is_available:
+                    logger.info(f"Surgeon {surgeon_id} is not available on {day_of_week} from {start_time_of_day} to {end_time_of_day}")
+                    return False
+
         return True
 
-    def is_feasible(self, proposed_schedule_assignments, check_db_too=True):
-        """Checks the overall feasibility of a given schedule (list of SurgeryRoomAssignment objects)."""
-        if not proposed_schedule_assignments:
-            logger.info("Feasibility Check: Empty schedule is considered feasible.")
+    def is_equipment_available(
+        self,
+        equipment_id: int,
+        start_time: datetime,
+        end_time: datetime,
+        current_assignments: List[SurgeryRoomAssignment],
+        surgery_id_to_ignore: Optional[int] = None
+    ) -> bool:
+        """
+        Check if equipment is available during the given time slot.
+
+        Args:
+            equipment_id: ID of the equipment to check
+            start_time: Start time of the slot
+            end_time: End time of the slot
+            current_assignments: List of current assignments to check against
+            surgery_id_to_ignore: ID of a surgery to ignore in the check
+
+        Returns:
+            True if the equipment is available, False otherwise
+        """
+        # Check if equipment exists
+        if self.db_session:
+            equipment = self.equipment_cache.get(equipment_id)
+            if not equipment:
+                equipment = self.db_session.query(SurgeryEquipment).filter_by(equipment_id=equipment_id).first()
+                if equipment:
+                    self.equipment_cache[equipment_id] = equipment
+
+        if not equipment:
+            logger.warning(f"Equipment {equipment_id} not found")
+            return False
+
+        # Check if equipment is available (general availability flag)
+        if hasattr(equipment, 'availability') and not equipment.availability:
+            logger.info(f"Equipment {equipment_id} is marked as unavailable")
+            return False
+
+        # Check for conflicts with existing equipment usages
+        if self.db_session:
+            # Get equipment usages that overlap with the proposed time slot
+            equipment_usages = self.db_session.query(SurgeryEquipmentUsage).filter(
+                SurgeryEquipmentUsage.equipment_id == equipment_id,
+                SurgeryEquipmentUsage.usage_start_time < end_time,
+                SurgeryEquipmentUsage.usage_end_time > start_time
+            ).all()
+
+            for usage in equipment_usages:
+                # Skip the usage for the surgery we're ignoring
+                if surgery_id_to_ignore and usage.surgery_id == surgery_id_to_ignore:
+                    continue
+
+                logger.debug(f"Equipment {equipment_id} is in use for surgery {usage.surgery_id} during proposed slot")
+                return False
+
+        return True
+
+    def is_room_available(
+        self,
+        room_id: int,
+        start_time: datetime,
+        end_time: datetime,
+        current_assignments: List[SurgeryRoomAssignment],
+        surgery_id_to_ignore: Optional[int] = None
+    ) -> bool:
+        """
+        Check if a room is available during the given time slot.
+
+        Args:
+            room_id: ID of the room to check
+            start_time: Start time of the slot
+            end_time: End time of the slot
+            current_assignments: List of current assignments to check against
+            surgery_id_to_ignore: ID of a surgery to ignore in the check
+
+        Returns:
+            True if the room is available, False otherwise
+        """
+        # Check if room exists
+        if self.db_session:
+            room = self.rooms_cache.get(room_id)
+            if not room:
+                room = self.db_session.query(OperatingRoom).filter_by(room_id=room_id).first()
+                if room:
+                    self.rooms_cache[room_id] = room
+
+        if not room:
+            logger.warning(f"Room {room_id} not found")
+            return False
+
+        # Check for conflicts with existing assignments
+        for assignment in current_assignments:
+            # Skip the assignment we're ignoring
+            if surgery_id_to_ignore and assignment.surgery_id == surgery_id_to_ignore:
+                continue
+
+            # Skip if not the same room
+            if assignment.room_id != room_id:
+                continue
+
+            # Check for overlap
+            if (start_time < assignment.end_time and end_time > assignment.start_time):
+                logger.debug(f"Room {room_id} is busy with surgery {assignment.surgery_id} during proposed slot")
+                return False
+
+        # Check room's operational hours if available
+        if hasattr(room, 'operational_start_time') and room.operational_start_time:
+            # Get operational start and end times for the day
+            op_start_time = datetime.combine(start_time.date(), room.operational_start_time)
+            # Assume 8-hour operational day if not specified
+            op_end_time = op_start_time + timedelta(hours=8)
+
+            # Check if the proposed time slot is within operational hours
+            if start_time < op_start_time or end_time > op_end_time:
+                logger.info(f"Room {room_id} is not operational during proposed slot")
+                return False
+
+        return True
+
+    def is_room_suitable_for_surgery(
+        self,
+        room_id: int,
+        surgery_id: int
+    ) -> bool:
+        """
+        Check if a room is suitable for a surgery.
+
+        Args:
+            room_id: ID of the room to check
+            surgery_id: ID of the surgery to check
+
+        Returns:
+            True if the room is suitable, False otherwise
+        """
+        if not self.db_session:
+            # Without a database session, we can't check room suitability
             return True
 
-        # Validate structure and extract key info first to avoid repeated getattr calls
-        validated_assignments = []
-        for i, assign_obj in enumerate(proposed_schedule_assignments):
-            try:
-                surgery_id = assign_obj.surgery_id
-                surgeon_id = assign_obj.surgeon_id
-                room_id = assign_obj.room_id
-                start_time_dt = assign_obj.start_time
-                end_time_dt = assign_obj.end_time
-                surgery_obj = assign_obj.surgery # Assuming this attribute holds the Surgery object or its ID for equipment check
+        # Get the surgery
+        surgery = self.surgeries_cache.get(surgery_id)
+        if not surgery:
+            surgery = self.db_session.query(Surgery).filter_by(surgery_id=surgery_id).first()
+            if surgery:
+                self.surgeries_cache[surgery_id] = surgery
 
-                if not all([surgery_id, surgeon_id, room_id, start_time_dt, end_time_dt, surgery_obj]):
-                    logger.warning(f"Feasibility Check: Assignment {i} is missing critical attributes. Schedule infeasible.")
-                    return False
-                if not isinstance(start_time_dt, datetime) or not isinstance(end_time_dt, datetime):
-                    logger.warning(f"Feasibility Check: Assignment {i} (Surgery {surgery_id}) has invalid datetime types. Schedule infeasible.")
-                    return False
-                if start_time_dt >= end_time_dt:
-                    logger.warning(f"Feasibility Check: Assignment {i} (Surgery {surgery_id}) has start time not before end time. Schedule infeasible.")
-                    return False
+        if not surgery:
+            logger.warning(f"Surgery {surgery_id} not found")
+            return False
 
-                validated_assignments.append({
-                    'original_obj': assign_obj,
-                    'surgery_id': str(surgery_id),
-                    'surgeon_id': str(surgeon_id),
-                    'room_id': str(room_id),
-                    'start_time_iso': start_time_dt.isoformat(),
-                    'end_time_iso': end_time_dt.isoformat(),
-                    'surgery_obj_for_equip': surgery_obj # Pass the surgery object/ID as needed by is_equipment_available
-                })
-            except AttributeError as e:
-                logger.error(f"Feasibility Check: Assignment {i} missing attributes ({e}). Schedule infeasible.")
+        # Get the surgery type
+        surgery_type_id = getattr(surgery, 'surgery_type_id', None)
+        if not surgery_type_id:
+            # If surgery doesn't have a type, we can't check room suitability
+            return True
+
+        surgery_type = self.surgery_types_cache.get(surgery_type_id)
+        if not surgery_type:
+            surgery_type = self.db_session.query(SurgeryType).filter_by(surgery_type_id=surgery_type_id).first()
+            if surgery_type:
+                self.surgery_types_cache[surgery_type_id] = surgery_type
+
+        if not surgery_type:
+            logger.warning(f"Surgery type {surgery_type_id} not found")
+            return True  # If we can't find the surgery type, assume room is suitable
+
+        # Check if the room has the required equipment for this surgery type
+        required_equipment = getattr(surgery_type, 'required_equipment', None)
+        if not required_equipment:
+            # If surgery type doesn't specify required equipment, any room is suitable
+            return True
+
+        # Get the room's equipment
+        room_equipment = self.room_equipment_cache.get(room_id, [])
+        if not room_equipment:
+            room_equipment = self.db_session.query(OperatingRoomEquipment).filter_by(room_id=room_id).all()
+            self.room_equipment_cache[room_id] = room_equipment
+
+        # Check if the room has all required equipment
+        room_equipment_ids = [re.equipment_id for re in room_equipment]
+        for req_equip in required_equipment.split(','):
+            req_equip = req_equip.strip()
+            if req_equip and req_equip not in room_equipment_ids:
+                logger.info(f"Room {room_id} is missing required equipment {req_equip} for surgery type {surgery_type_id}")
                 return False
 
-        for i, assignment_info in enumerate(validated_assignments):
-            surgery_id = assignment_info['surgery_id']
-            surgeon_id = assignment_info['surgeon_id']
-            room_id = assignment_info['room_id']
-            start_time_iso = assignment_info['start_time_iso']
-            end_time_iso = assignment_info['end_time_iso']
-            surgery_obj_for_equip = assignment_info['surgery_obj_for_equip']
-
-            logger.debug(f"Checking feasibility for assignment {i}: Surgery {surgery_id} in Room {room_id} by Surgeon {surgeon_id} from {start_time_iso} to {end_time_iso}")
-
-            # 1. Check Surgeon Availability
-            # Pass the full list of proposed_schedule_assignments for context, ignoring the current one being checked.
-            if not self.is_surgeon_available(
-                surgeon_id, start_time_iso, end_time_iso, proposed_schedule_assignments, surgery_id_to_ignore=surgery_id, check_db=check_db_too
-            ):
-                logger.info(f"Feasibility Check: Surgeon {surgeon_id} not available for Surgery {surgery_id}. Schedule infeasible.")
-                return False
-
-            # 2. Check Equipment Availability
-            # Pass the full list for context, ignoring current surgery.
-            if not self.is_equipment_available(
-                surgery_obj_for_equip, start_time_iso, end_time_iso, proposed_schedule_assignments, surgery_id_to_ignore=surgery_id, check_db=check_db_too
-            ):
-                logger.info(f"Feasibility Check: Equipment not available for Surgery {surgery_id}. Schedule infeasible.")
-                return False
-
-            # 3. Check Room Availability (already considers DB if session exists)
-            # Pass the full list for context, ignoring current surgery.
-            if not self.is_room_available(
-                room_id, start_time_iso, end_time_iso, proposed_schedule_assignments, current_surgery_id_to_ignore=surgery_id
-            ):
-                logger.info(f"Feasibility Check: Room {room_id} not available for Surgery {surgery_id}. Schedule infeasible.")
-                return False
-
-        logger.info("Feasibility Check: Entire proposed schedule is feasible.")
         return True
 
-    def _get_surgery_duration(self, surgery_id):
-        pass
+    def is_feasible(
+        self,
+        surgery_id: int,
+        room_id: int,
+        start_time: datetime,
+        end_time: datetime,
+        current_assignments: List[SurgeryRoomAssignment],
+        surgery_id_to_ignore: Optional[int] = None
+    ) -> bool:
+        """
+        Check if a surgery assignment is feasible.
+
+        Args:
+            surgery_id: ID of the surgery to check
+            room_id: ID of the room for the assignment
+            start_time: Start time of the assignment
+            end_time: End time of the assignment
+            current_assignments: List of current assignments to check against
+            surgery_id_to_ignore: ID of a surgery to ignore in the check
+
+        Returns:
+            True if the assignment is feasible, False otherwise
+        """
+        # Get the surgery
+        surgery = None
+        if self.db_session:
+            surgery = self.surgeries_cache.get(surgery_id)
+            if not surgery:
+                surgery = self.db_session.query(Surgery).filter_by(surgery_id=surgery_id).first()
+                if surgery:
+                    self.surgeries_cache[surgery_id] = surgery
+
+        if not surgery:
+            logger.warning(f"Surgery {surgery_id} not found")
+            return False
+
+        # Check room availability
+        if not self.is_room_available(room_id, start_time, end_time, current_assignments, surgery_id_to_ignore):
+            return False
+
+        # Check surgeon availability
+        surgeon_id = getattr(surgery, 'surgeon_id', None)
+        if surgeon_id and not self.is_surgeon_available(surgeon_id, start_time, end_time, current_assignments, surgery_id_to_ignore):
+            return False
+
+        # Check room suitability
+        if not self.is_room_suitable_for_surgery(room_id, surgery_id):
+            return False
+
+        # Check equipment availability if we have equipment usage data
+        if self.db_session:
+            equipment_usages = self.db_session.query(SurgeryEquipmentUsage).filter_by(surgery_id=surgery_id).all()
+            for usage in equipment_usages:
+                if not self.is_equipment_available(usage.equipment_id, start_time, end_time, current_assignments, surgery_id_to_ignore):
+                    return False
+
+        return True
+
+    def check_solution_feasibility(
+        self,
+        assignments: List[SurgeryRoomAssignment]
+    ) -> bool:
+        """
+        Check the feasibility of an entire solution.
+
+        Args:
+            assignments: List of surgery room assignments
+
+        Returns:
+            True if the solution is feasible, False otherwise
+        """
+        if not assignments:
+            return True  # Empty solution is feasible
+
+        for i, assignment in enumerate(assignments):
+            # Create a copy of assignments without the current one
+            other_assignments = assignments[:i] + assignments[i+1:]
+
+            # Check if this assignment is feasible
+            if not self.is_feasible(
+                assignment.surgery_id,
+                assignment.room_id,
+                assignment.start_time,
+                assignment.end_time,
+                other_assignments
+            ):
+                return False
+
+        return True

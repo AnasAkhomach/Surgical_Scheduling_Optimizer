@@ -1,14 +1,28 @@
+"""
+Application for surgery scheduling with Tabu Search optimization.
+
+This module provides a command-line interface for the surgery scheduling application.
+"""
+
 import argparse
 import logging
 import json
-from datetime import datetime, timedelta
 import sys
 import os
+from datetime import datetime, timedelta
 
-from simple_models import Surgery, OperatingRoom, SurgeryRoomAssignment
-from scheduler_utils import SchedulerUtils, DatetimeWrapper
+from models import (
+    Surgery,
+    OperatingRoom,
+    Surgeon,
+    SurgeryType,
+    SurgeryRoomAssignment
+)
+from feasibility_checker import FeasibilityChecker
+from neighborhood_strategies import NeighborhoodStrategies
+from solution_evaluator import SolutionEvaluator
 from tabu_optimizer import TabuOptimizer
-from simple_feasibility_checker import FeasibilityChecker
+from db_config import SessionLocal, init_db
 
 # Configure logging
 logging.basicConfig(
@@ -23,137 +37,180 @@ logger = logging.getLogger(__name__)
 
 class SchedulerApp:
     """
-    Main application class for the Surgery Scheduler.
+    Application for surgery scheduling with Tabu Search optimization.
 
-    This class provides a simple interface to the scheduling system,
-    allowing users to load data, run the optimizer, and view/save results.
+    This class provides a command-line interface for the surgery scheduling application.
     """
 
     def __init__(self):
+        """Initialize the application."""
+        self.db_session = None
         self.surgeries = []
         self.operating_rooms = []
-        self.sds_times = {}  # Sequence-dependent setup times
-        self.surgery_equipments = []
-        self.surgery_equipment_usages = []
-        self.db_session = None  # We're not using a real DB for the MVP
+        self.surgeons = []
+        self.surgery_types = []
+        self.sds_times_data = {}
 
-    def load_data_from_json(self, surgeries_file, rooms_file, sds_times_file=None):
+    def load_data_from_json(self, surgeries_file, rooms_file, surgeons_file=None, sds_times_file=None):
         """
         Load data from JSON files.
 
         Args:
             surgeries_file: Path to surgeries JSON file
             rooms_file: Path to operating rooms JSON file
-            sds_times_file: Optional path to sequence-dependent setup times JSON file
+            surgeons_file: Path to surgeons JSON file (optional)
+            sds_times_file: Path to sequence-dependent setup times JSON file (optional)
+
+        Returns:
+            True if data was loaded successfully, False otherwise
         """
-        # Load surgeries
         try:
+            # Load surgeries
             with open(surgeries_file, 'r') as f:
                 surgeries_data = json.load(f)
 
             self.surgeries = []
-            for s in surgeries_data:
+            for surgery_data in surgeries_data:
                 surgery = Surgery(
-                    surgery_id=s['surgery_id'],
-                    surgery_type_id=s['surgery_type_id'],
-                    duration_minutes=s['duration_minutes'],
-                    surgeon_id=s['surgeon_id'],
-                    urgency_level=s.get('urgency_level', 'Medium')
+                    surgery_id=surgery_data['surgery_id'],
+                    surgery_type_id=surgery_data['surgery_type_id'],
+                    duration_minutes=surgery_data['duration_minutes'],
+                    surgeon_id=surgery_data['surgeon_id'],
+                    urgency_level=surgery_data.get('urgency_level', 'Medium')
                 )
                 self.surgeries.append(surgery)
 
-            logger.info(f"Loaded {len(self.surgeries)} surgeries")
-        except Exception as e:
-            logger.error(f"Error loading surgeries: {e}")
-            return False
+            logger.info(f"Loaded {len(self.surgeries)} surgeries from {surgeries_file}")
 
-        # Load operating rooms
-        try:
+            # Load operating rooms
             with open(rooms_file, 'r') as f:
                 rooms_data = json.load(f)
 
             self.operating_rooms = []
-            for r in rooms_data:
-                # Parse operational start time
-                if 'operational_start_time' in r:
-                    if isinstance(r['operational_start_time'], str):
-                        op_start = datetime.strptime(r['operational_start_time'], "%H:%M:%S").time()
-                    else:
-                        op_start = None
-                else:
-                    op_start = None
+            for room_data in rooms_data:
+                # Parse operational_start_time if provided
+                operational_start_time = None
+                if 'operational_start_time' in room_data:
+                    try:
+                        time_str = room_data['operational_start_time']
+                        operational_start_time = datetime.strptime(time_str, '%H:%M:%S').time()
+                    except ValueError:
+                        logger.warning(f"Invalid time format for operational_start_time: {time_str}")
 
                 room = OperatingRoom(
-                    room_id=r['room_id'],
-                    operational_start_time=op_start,
-                    name=r.get('name', f"Room {r['room_id']}")
+                    room_id=room_data['room_id'],
+                    location=room_data.get('location', f"Room {room_data['room_id']}"),
+                    operational_start_time=operational_start_time
                 )
                 self.operating_rooms.append(room)
 
-            logger.info(f"Loaded {len(self.operating_rooms)} operating rooms")
-        except Exception as e:
-            logger.error(f"Error loading operating rooms: {e}")
-            return False
+            logger.info(f"Loaded {len(self.operating_rooms)} operating rooms from {rooms_file}")
 
-        # Load sequence-dependent setup times if provided
-        if sds_times_file:
-            try:
+            # Load surgeons if provided
+            if surgeons_file:
+                with open(surgeons_file, 'r') as f:
+                    surgeons_data = json.load(f)
+
+                self.surgeons = []
+                for surgeon_data in surgeons_data:
+                    surgeon = Surgeon(
+                        surgeon_id=surgeon_data['surgeon_id'],
+                        name=surgeon_data.get('name', f"Surgeon {surgeon_data['surgeon_id']}"),
+                        specialization=surgeon_data.get('specialization', 'General'),
+                        credentials=surgeon_data.get('credentials', 'MD'),
+                        availability=surgeon_data.get('availability', True)
+                    )
+                    self.surgeons.append(surgeon)
+
+                logger.info(f"Loaded {len(self.surgeons)} surgeons from {surgeons_file}")
+
+            # Load sequence-dependent setup times if provided
+            if sds_times_file:
                 with open(sds_times_file, 'r') as f:
                     sds_data = json.load(f)
 
-                self.sds_times = {}
-                for entry in sds_data:
-                    from_type = entry['from_surgery_type_id']
-                    to_type = entry['to_surgery_type_id']
-                    setup_time = entry['setup_time_minutes']
-                    self.sds_times[(from_type, to_type)] = setup_time
+                self.sds_times_data = {}
+                for from_type, to_types in sds_data.items():
+                    for to_type, setup_time in to_types.items():
+                        self.sds_times_data[(int(from_type), int(to_type))] = setup_time
 
-                logger.info(f"Loaded {len(self.sds_times)} sequence-dependent setup times")
-            except Exception as e:
-                logger.error(f"Error loading sequence-dependent setup times: {e}")
-                # Continue without SDS times
+                logger.info(f"Loaded {len(self.sds_times_data)} sequence-dependent setup times from {sds_times_file}")
 
-        return True
+            return True
+        except Exception as e:
+            logger.error(f"Error loading data from JSON: {e}")
+            return False
 
-    def run_scheduler(self, max_iterations=100, tabu_list_size=10):
+    def load_data_from_db(self):
         """
-        Run the scheduler to generate an optimized schedule.
-
-        Args:
-            max_iterations: Maximum number of iterations for the Tabu Search
-            tabu_list_size: Size of the tabu list
+        Load data from database.
 
         Returns:
-            List of SurgeryRoomAssignment objects representing the optimized schedule
+            True if data was loaded successfully, False otherwise
         """
+        try:
+            # Create database session
+            self.db_session = SessionLocal()
+
+            # Load surgeries
+            self.surgeries = self.db_session.query(Surgery).all()
+            logger.info(f"Loaded {len(self.surgeries)} surgeries from database")
+
+            # Load operating rooms
+            self.operating_rooms = self.db_session.query(OperatingRoom).all()
+            logger.info(f"Loaded {len(self.operating_rooms)} operating rooms from database")
+
+            # Load surgeons
+            self.surgeons = self.db_session.query(Surgeon).all()
+            logger.info(f"Loaded {len(self.surgeons)} surgeons from database")
+
+            # Load surgery types
+            self.surgery_types = self.db_session.query(SurgeryType).all()
+            logger.info(f"Loaded {len(self.surgery_types)} surgery types from database")
+
+            # Load sequence-dependent setup times
+            sds_times = self.db_session.query(SurgeryType).all()
+            # TODO: Implement loading SDST from database
+
+            return True
+        except Exception as e:
+            logger.error(f"Error loading data from database: {e}")
+            return False
+
+    def run_scheduler(self, use_db=False, max_iterations=100, tabu_tenure=10, max_no_improvement=20, time_limit_seconds=300):
+        """
+        Run the scheduler.
+
+        Args:
+            use_db: Whether to use the database
+            max_iterations: Maximum number of iterations
+            tabu_tenure: Tabu tenure
+            max_no_improvement: Maximum number of iterations without improvement
+            time_limit_seconds: Time limit in seconds
+
+        Returns:
+            List of SurgeryRoomAssignment objects
+        """
+        # Load data if needed
+        if use_db and not self.surgeries:
+            if not self.load_data_from_db():
+                logger.error("Failed to load data from database")
+                return None
+
         if not self.surgeries or not self.operating_rooms:
-            logger.error("Cannot run scheduler: No surgeries or operating rooms loaded")
-            return []
+            logger.error("No surgeries or operating rooms loaded")
+            return None
 
-        # Create feasibility checker
-        feasibility_checker = FeasibilityChecker(
-            db_session=self.db_session,
-            surgeries_data=self.surgeries,
-            operating_rooms_data=self.operating_rooms,
-            all_surgery_equipments_data=self.surgery_equipments
-        )
-
-        # Create scheduler utils
-        scheduler_utils = SchedulerUtils(
-            self.db_session,
-            self.surgeries,
-            self.operating_rooms,
-            feasibility_checker,
-            self.surgery_equipments,
-            self.surgery_equipment_usages,
-            self.sds_times
-        )
-
-        # Create and run optimizer
+        # Create optimizer
         optimizer = TabuOptimizer(
-            scheduler_utils,
-            tabu_list_size=tabu_list_size,
-            max_iterations=max_iterations
+            db_session=self.db_session if use_db else None,
+            surgeries=self.surgeries,
+            operating_rooms=self.operating_rooms,
+            sds_times_data=self.sds_times_data,
+            tabu_tenure=tabu_tenure,
+            max_iterations=max_iterations,
+            max_no_improvement=max_no_improvement,
+            time_limit_seconds=time_limit_seconds
         )
 
         # Run optimization
@@ -163,96 +220,123 @@ class SchedulerApp:
 
         return solution
 
-    def save_solution_to_json(self, solution, output_file):
-        """
-        Save the solution to a JSON file.
-
-        Args:
-            solution: List of SurgeryRoomAssignment objects
-            output_file: Path to output JSON file
-        """
-        try:
-            # Convert solution to serializable format
-            serialized = []
-            for assignment in solution:
-                serialized.append({
-                    'surgery_id': assignment.surgery_id,
-                    'room_id': assignment.room_id,
-                    'start_time': assignment.start_time.isoformat(),
-                    'end_time': assignment.end_time.isoformat()
-                })
-
-            with open(output_file, 'w') as f:
-                json.dump(serialized, f, indent=2)
-
-            logger.info(f"Solution saved to {output_file}")
-            return True
-        except Exception as e:
-            logger.error(f"Error saving solution: {e}")
-            return False
-
     def print_solution(self, solution):
         """
-        Print the solution in a human-readable format.
+        Print a solution in a readable format.
 
         Args:
             solution: List of SurgeryRoomAssignment objects
         """
         if not solution:
-            print("No solution found.")
+            print("Empty solution")
             return
 
-        print("\n===== SURGERY SCHEDULE =====")
-        print(f"Total surgeries scheduled: {len(solution)}")
+        # Sort by room and start time
+        sorted_solution = sorted(solution, key=lambda a: (a.room_id, a.start_time))
 
         # Group by room
-        by_room = {}
-        for assignment in solution:
-            if assignment.room_id not in by_room:
-                by_room[assignment.room_id] = []
-            by_room[assignment.room_id].append(assignment)
+        rooms = {}
+        for assignment in sorted_solution:
+            if assignment.room_id not in rooms:
+                rooms[assignment.room_id] = []
+            rooms[assignment.room_id].append(assignment)
 
-        # Sort rooms
-        for room_id in sorted(by_room.keys()):
-            print(f"\nROOM {room_id}:")
+        # Print schedule by room
+        for room_id, assignments in rooms.items():
+            print(f"\nRoom {room_id}:")
             print("-" * 60)
             print(f"{'Surgery ID':<12}{'Start Time':<20}{'End Time':<20}{'Duration':<10}")
             print("-" * 60)
 
-            # Sort assignments by start time
-            assignments = sorted(by_room[room_id], key=lambda a: a.start_time)
+            for assignment in assignments:
+                start_time = assignment.start_time.strftime("%Y-%m-%d %H:%M")
+                end_time = assignment.end_time.strftime("%Y-%m-%d %H:%M")
+                duration = (assignment.end_time - assignment.start_time).total_seconds() / 60
+                print(f"{assignment.surgery_id:<12}{start_time:<20}{end_time:<20}{duration:<10.0f}")
 
-            for a in assignments:
-                duration = (a.end_time - a.start_time).total_seconds() / 60
-                print(f"{a.surgery_id:<12}{a.start_time.strftime('%Y-%m-%d %H:%M'):<20}"
-                      f"{a.end_time.strftime('%Y-%m-%d %H:%M'):<20}{int(duration):<10}")
+    def save_solution_to_json(self, solution, filename):
+        """
+        Save a solution to a JSON file.
 
-        print("\n" + "=" * 30)
+        Args:
+            solution: List of SurgeryRoomAssignment objects
+            filename: Output filename
+
+        Returns:
+            True if the solution was saved successfully, False otherwise
+        """
+        try:
+            # Convert solution to serializable format
+            serializable_solution = []
+            for assignment in solution:
+                serializable_solution.append({
+                    "surgery_id": assignment.surgery_id,
+                    "room_id": assignment.room_id,
+                    "start_time": assignment.start_time.isoformat(),
+                    "end_time": assignment.end_time.isoformat(),
+                    "duration_minutes": (assignment.end_time - assignment.start_time).total_seconds() / 60
+                })
+
+            # Save to file
+            with open(filename, 'w') as f:
+                json.dump(serializable_solution, f, indent=2)
+
+            logger.info(f"Solution saved to {filename}")
+            return True
+        except Exception as e:
+            logger.error(f"Error saving solution to JSON: {e}")
+            return False
+
+    def close(self):
+        """Close the database session."""
+        if self.db_session:
+            self.db_session.close()
+            self.db_session = None
 
 def main():
     """Main entry point for the application."""
     parser = argparse.ArgumentParser(description='Surgery Scheduler')
-    parser.add_argument('--surgeries', required=True, help='Path to surgeries JSON file')
-    parser.add_argument('--rooms', required=True, help='Path to operating rooms JSON file')
+    parser.add_argument('--surgeries', help='Path to surgeries JSON file')
+    parser.add_argument('--rooms', help='Path to operating rooms JSON file')
+    parser.add_argument('--surgeons', help='Path to surgeons JSON file')
     parser.add_argument('--sds', help='Path to sequence-dependent setup times JSON file')
     parser.add_argument('--output', help='Path to output JSON file')
+    parser.add_argument('--use-db', action='store_true', help='Use database instead of JSON files')
     parser.add_argument('--iterations', type=int, default=100, help='Maximum iterations for Tabu Search')
     parser.add_argument('--tabu-size', type=int, default=10, help='Size of tabu list')
+    parser.add_argument('--no-improvement', type=int, default=20, help='Maximum iterations without improvement')
+    parser.add_argument('--time-limit', type=int, default=300, help='Time limit in seconds')
 
     args = parser.parse_args()
 
     app = SchedulerApp()
 
     # Load data
-    if not app.load_data_from_json(args.surgeries, args.rooms, args.sds):
-        logger.error("Failed to load data. Exiting.")
-        return 1
+    if args.use_db:
+        if not app.load_data_from_db():
+            logger.error("Failed to load data from database. Exiting.")
+            return 1
+    else:
+        if not args.surgeries or not args.rooms:
+            logger.error("Surgeries and rooms files are required when not using database. Exiting.")
+            return 1
+
+        if not app.load_data_from_json(args.surgeries, args.rooms, args.surgeons, args.sds):
+            logger.error("Failed to load data from JSON files. Exiting.")
+            return 1
 
     # Run scheduler
-    solution = app.run_scheduler(max_iterations=args.iterations, tabu_list_size=args.tabu_size)
+    solution = app.run_scheduler(
+        use_db=args.use_db,
+        max_iterations=args.iterations,
+        tabu_tenure=args.tabu_size,
+        max_no_improvement=args.no_improvement,
+        time_limit_seconds=args.time_limit
+    )
 
     if not solution:
         logger.error("Scheduler failed to find a solution.")
+        app.close()
         return 1
 
     # Print solution
@@ -260,8 +344,12 @@ def main():
 
     # Save solution if output file specified
     if args.output:
-        app.save_solution_to_json(solution, args.output)
+        if not app.save_solution_to_json(solution, args.output):
+            logger.error("Failed to save solution to JSON file.")
+            app.close()
+            return 1
 
+    app.close()
     return 0
 
 if __name__ == "__main__":
