@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div v-if="isVisible" class="keyboard-shortcuts-overlay" @click="close">
+    <div v-if="isVisible" class="keyboard-shortcuts-overlay" data-testid="keyboard-shortcuts" @click="close">
       <div class="keyboard-shortcuts-modal" @click.stop>
         <div class="modal-header">
           <h2>Keyboard Shortcuts</h2>
@@ -53,14 +53,14 @@ const isVisible = ref(false);
 const groupedShortcuts = computed(() => {
   const shortcuts = keyboardShortcuts.getShortcuts();
   const groups = {};
-  
+
   shortcuts.forEach(shortcut => {
     if (!groups[shortcut.scope]) {
       groups[shortcut.scope] = [];
     }
     groups[shortcut.scope].push(shortcut);
   });
-  
+
   return groups;
 });
 
@@ -106,7 +106,7 @@ const formatKeyName = (key) => {
     'f11': 'F11',
     'f12': 'F12',
   };
-  
+
   const formattedKey = specialKeys[key.toLowerCase()] || key.toUpperCase();
   return formattedKey;
 };

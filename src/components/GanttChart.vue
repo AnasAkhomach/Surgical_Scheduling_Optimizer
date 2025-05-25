@@ -220,15 +220,18 @@ const currentDropTarget = ref(null);
 
 // Current time indicator
 const isCurrentTimeVisible = computed(() => {
+  if (!currentDateRange || !currentDateRange.start || !currentDateRange.end) {
+    return false;
+  }
   const now = new Date();
-  return now >= currentDateRange.value.start && now <= currentDateRange.value.end;
+  return now >= currentDateRange.start && now <= currentDateRange.end;
 });
 
 const currentTimeIndicatorStyle = computed(() => {
-  if (!isCurrentTimeVisible.value) return {};
+  if (!isCurrentTimeVisible.value || !currentDateRange || !currentDateRange.start) return {};
 
   const now = new Date();
-  const minutesFromViewStart = (now.getTime() - currentDateRange.value.start.getTime()) / (1000 * 60);
+  const minutesFromViewStart = (now.getTime() - currentDateRange.start.getTime()) / (1000 * 60);
   const leftPosition = minutesFromViewStart * pixelsPerMinute.value;
 
   return {
@@ -238,8 +241,12 @@ const currentTimeIndicatorStyle = computed(() => {
 
 // Format the date range for display
 const formattedDateRange = computed(() => {
-  const start = currentDateRange.value.start;
-  const end = currentDateRange.value.end;
+  if (!currentDateRange || !currentDateRange.start || !currentDateRange.end) {
+    return 'Loading...';
+  }
+
+  const start = currentDateRange.start;
+  const end = currentDateRange.end;
 
   if (scheduleStore.ganttViewMode === 'Day') {
     return start.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
@@ -251,8 +258,12 @@ const formattedDateRange = computed(() => {
 
 // Computed property for generating hourly time markers based on current view range
 const hours = computed(() => {
-  const start = currentDateRange.value.start;
-  const end = currentDateRange.value.end;
+  if (!currentDateRange || !currentDateRange.start || !currentDateRange.end) {
+    return [];
+  }
+
+  const start = currentDateRange.start;
+  const end = currentDateRange.end;
 
   if (scheduleStore.ganttViewMode === 'Day') {
     // For day view, show hours from 7:00 to 19:00 (7am to 7pm)
@@ -310,18 +321,26 @@ const pixelsPerMinute = computed(() => {
 
 // Calculate surgery block position and size
 const getSurgeryBlockStyle = (surgery) => {
+  if (!currentDateRange || !currentDateRange.start || !surgery) {
+    return {
+      left: '0px',
+      width: '100px',
+      backgroundColor: 'var(--color-primary)',
+    };
+  }
+
   const startTime = new Date(surgery.startTime);
   const endTime = new Date(surgery.endTime);
   const durationWithSDST = (endTime.getTime() - startTime.getTime()) / (1000 * 60);
 
-  const viewStartTime = currentDateRange.value.start;
+  const viewStartTime = currentDateRange.start;
   const startMinutesFromViewStart = (startTime.getTime() - viewStartTime.getTime()) / (1000 * 60);
 
   const leftPosition = startMinutesFromViewStart * pixelsPerMinute.value;
   const width = durationWithSDST * pixelsPerMinute.value;
 
   // Get surgery type color from CSS variables
-  const surgeryTypeColorVar = `--color-surgery-${surgery.type.toLowerCase()}`;
+  const surgeryTypeColorVar = `--color-surgery-${surgery.type?.toLowerCase() || 'default'}`;
   const element = document.documentElement;
   const surgeryColor = getComputedStyle(element).getPropertyValue(surgeryTypeColorVar).trim() || 'var(--color-primary)';
 
@@ -334,6 +353,16 @@ const getSurgeryBlockStyle = (surgery) => {
 
 // Calculate SDST segment style with color coding based on duration
 const getSDSTSegmentStyle = (surgery) => {
+  if (!surgery || surgery.sdsTime === undefined || surgery.sdsTime === null) {
+    return {
+      width: '0px',
+      backgroundColor: 'transparent',
+      borderRight: 'none',
+      flexShrink: 0,
+      position: 'relative',
+    };
+  }
+
   const sdstWidth = surgery.sdsTime * pixelsPerMinute.value;
 
   // Color coding based on SDST duration
@@ -487,7 +516,7 @@ const onDrop = (event, targetORId) => {
   currentDropTarget.value = null;
 
   const surgeryId = event.dataTransfer.getData('text/plain');
-  if (!surgeryId) return;
+  if (!surgeryId || !currentDateRange || !currentDateRange.start) return;
 
   // Calculate drop time
   const ganttTimeline = event.target.closest('.or-timeline');
@@ -499,7 +528,7 @@ const onDrop = (event, targetORId) => {
   const totalX = clickX + scrollX;
 
   const minutesFromViewStart = totalX / pixelsPerMinute.value;
-  const newStartTime = new Date(currentDateRange.value.start.getTime() + minutesFromViewStart * 60 * 1000);
+  const newStartTime = new Date(currentDateRange.start.getTime() + minutesFromViewStart * 60 * 1000);
 
   // Snap to 15-minute intervals
   const minutes = newStartTime.getMinutes();

@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div class="toast-container">
+    <div class="toast-container" data-testid="toast-notification">
       <TransitionGroup name="toast">
         <div
           v-for="toast in toasts"
@@ -65,19 +65,19 @@ const addToast = (toast) => {
     type: toast.type || 'info',
     message: toast.message,
     title: toast.title || null,
-    duration: toast.duration || 5000, // Default 5 seconds
+    duration: toast.duration !== undefined ? toast.duration : 5000, // Default 5 seconds
     action: toast.action || null
   };
-  
+
   toasts.value.push(newToast);
-  
+
   // Auto-dismiss after duration
   if (newToast.duration > 0) {
     toastTimeouts.value[id] = setTimeout(() => {
       dismissToast(id);
     }, newToast.duration);
   }
-  
+
   return id;
 };
 
@@ -86,7 +86,7 @@ const dismissToast = (id) => {
   const index = toasts.value.findIndex(t => t.id === id);
   if (index !== -1) {
     toasts.value.splice(index, 1);
-    
+
     // Clear the timeout
     if (toastTimeouts.value[id]) {
       clearTimeout(toastTimeouts.value[id]);

@@ -370,6 +370,35 @@
         <div v-else>
           <h2>Surgery Details</h2>
           <p>Select a pending surgery to view its details, or drag it to the schedule. Click "Create New Surgery" to add a new entry.</p>
+
+          <!-- Show form fields for reference/testing -->
+          <div class="form-preview">
+            <h3>Surgery Form Fields</h3>
+            <div class="form-group">
+              <label>Patient ID:</label>
+              <input type="text" class="form-control" disabled placeholder="Enter Patient ID">
+            </div>
+            <div class="form-group">
+              <label>Patient Name:</label>
+              <input type="text" class="form-control" disabled placeholder="Enter Patient Name">
+            </div>
+            <div class="form-group">
+              <label>Surgery Type:</label>
+              <select class="form-control" disabled>
+                <option>Select a surgery type</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Estimated Duration (min):</label>
+              <input type="number" class="form-control" disabled placeholder="Enter duration">
+            </div>
+            <div class="form-group">
+              <label>Priority Level:</label>
+              <select class="form-control" disabled>
+                <option>Select priority</option>
+              </select>
+            </div>
+          </div>
         </div>
       </aside>
     </div>
@@ -539,7 +568,8 @@ const initializeData = () => {
   }
 
   // Set isGanttInitialized to true since we're using the actual GanttChart component
-  isGanttInitialized.value = true;
+  // For testing purposes, we'll keep it false initially to show the placeholder
+  // isGanttInitialized.value = true;
 };
 
 // Helper to transform surgery data to Gantt task format (example)

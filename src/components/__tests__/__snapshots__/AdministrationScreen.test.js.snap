@@ -1,0 +1,11 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`AdministrationScreen > matches snapshot 1`] = `
+"<div data-v-eaf6c11d="" class="section-container">
+  <h1 data-v-eaf6c11d="">Administration</h1>
+  <div data-v-eaf6c11d="" class="admin-sections">
+    <!-- Placeholder navigation for different admin sections -->
+    <p data-v-eaf6c11d="">Admin sections placeholder:</p><button data-v-eaf6c11d="">User Management</button><button data-v-eaf6c11d="">Role Management</button><button data-v-eaf6c11d="">System Settings</button>
+  </div>
+</div>"
+`;
