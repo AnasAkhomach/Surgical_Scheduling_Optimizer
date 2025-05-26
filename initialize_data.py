@@ -174,41 +174,94 @@ def initialize_surgeries():
     ]
 
 def initialize_surgeries_sqlalchemy():
-    # Define more comprehensive surgery data directly here for clarity
-    # patient_id and surgeon_id will now be integers, assuming they correspond to auto-generated IDs.
-    # For simplicity, we'll assume Patient IDs 1,2,3 and Surgeon IDs 1,2,3 are created in that order.
+    # First, we need to create surgery types
+    from db_config import SessionLocal
+
+    # Create a session to check if surgery types exist
+    db = SessionLocal()
+    try:
+        # Check if we have surgery types
+        from models import SurgeryType
+        surgery_types = db.query(SurgeryType).all()
+
+        # If no surgery types exist, create them
+        if not surgery_types:
+            surgery_types = [
+                SurgeryType(name="Appendectomy", description="Removal of the appendix"),
+                SurgeryType(name="Knee Replacement", description="Total knee arthroplasty"),
+                SurgeryType(name="Craniotomy", description="Surgical opening of the skull"),
+                SurgeryType(name="Coronary Bypass", description="Coronary artery bypass grafting"),
+                SurgeryType(name="Hip Arthroscopy", description="Minimally invasive hip surgery")
+            ]
+            db.add_all(surgery_types)
+            db.commit()
+
+            # Refresh to get the IDs
+            for st in surgery_types:
+                db.refresh(st)
+
+        # Create a mapping of surgery type names to IDs
+        surgery_type_map = {st.name: st.type_id for st in surgery_types}
+
+    finally:
+        db.close()
+
+    # Define surgeries with surgery_type_id instead of surgery_type
     return [
         Surgery( # surgery_id will be auto-generated
-            patient_id=1, surgeon_id=1, surgery_type="Appendectomy",
-            scheduled_date=datetime(2024, 7, 1, 8, 0, 0), # Set scheduled_date
-            start_time=datetime(2024, 7, 1, 8, 0, 0), end_time=datetime(2024, 7, 1, 10, 0, 0),
-            duration_minutes=120, status="Scheduled", urgency_level="High"
-            # priority field is not in the Surgery model from models.py, removing it.
-            # Changed status to "Scheduled" and urgency to urgency_level to match model
+            patient_id=1,
+            surgeon_id=1,
+            surgery_type_id=surgery_type_map.get("Appendectomy", 1),
+            scheduled_date=datetime(2024, 7, 1, 8, 0, 0),
+            start_time=datetime(2024, 7, 1, 8, 0, 0),
+            end_time=datetime(2024, 7, 1, 10, 0, 0),
+            duration_minutes=120,
+            status="Scheduled",
+            urgency_level="High"
         ),
         Surgery(
-            patient_id=2, surgeon_id=2, surgery_type="Knee Replacement",
+            patient_id=2,
+            surgeon_id=2,
+            surgery_type_id=surgery_type_map.get("Knee Replacement", 2),
             scheduled_date=datetime(2024, 7, 1, 10, 30, 0),
-            start_time=datetime(2024, 7, 1, 10, 30, 0), end_time=datetime(2024, 7, 1, 13, 0, 0),
-            duration_minutes=150, status="Scheduled", urgency_level="Medium"
+            start_time=datetime(2024, 7, 1, 10, 30, 0),
+            end_time=datetime(2024, 7, 1, 13, 0, 0),
+            duration_minutes=150,
+            status="Scheduled",
+            urgency_level="Medium"
         ),
         Surgery(
-            patient_id=3, surgeon_id=3, surgery_type="Craniotomy",
+            patient_id=3,
+            surgeon_id=3,
+            surgery_type_id=surgery_type_map.get("Craniotomy", 3),
             scheduled_date=datetime(2024, 7, 2, 9, 0, 0),
-            start_time=datetime(2024, 7, 2, 9, 0, 0), end_time=datetime(2024, 7, 2, 14, 0, 0),
-            duration_minutes=300, status="Scheduled", urgency_level="High"
+            start_time=datetime(2024, 7, 2, 9, 0, 0),
+            end_time=datetime(2024, 7, 2, 14, 0, 0),
+            duration_minutes=300,
+            status="Scheduled",
+            urgency_level="High"
         ),
         Surgery(
-            patient_id=1, surgeon_id=1, surgery_type="Coronary Bypass",
+            patient_id=1,
+            surgeon_id=1,
+            surgery_type_id=surgery_type_map.get("Coronary Bypass", 4),
             scheduled_date=datetime(2024, 7, 3, 8, 0, 0),
-            start_time=datetime(2024, 7, 3, 8, 0, 0), end_time=datetime(2024, 7, 3, 12, 0, 0),
-            duration_minutes=240, status="Scheduled", urgency_level="High"
+            start_time=datetime(2024, 7, 3, 8, 0, 0),
+            end_time=datetime(2024, 7, 3, 12, 0, 0),
+            duration_minutes=240,
+            status="Scheduled",
+            urgency_level="High"
         ),
         Surgery(
-            patient_id=2, surgeon_id=2, surgery_type="Hip Arthroscopy",
+            patient_id=2,
+            surgeon_id=2,
+            surgery_type_id=surgery_type_map.get("Hip Arthroscopy", 5),
             scheduled_date=datetime(2024, 7, 4, 13, 0, 0),
-            start_time=datetime(2024, 7, 4, 13, 0, 0), end_time=datetime(2024, 7, 4, 15, 0, 0),
-            duration_minutes=120, status="Scheduled", urgency_level="Low"
+            start_time=datetime(2024, 7, 4, 13, 0, 0),
+            end_time=datetime(2024, 7, 4, 15, 0, 0),
+            duration_minutes=120,
+            status="Scheduled",
+            urgency_level="Low"
         ),
     ]
 

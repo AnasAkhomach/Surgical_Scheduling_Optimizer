@@ -246,23 +246,48 @@ python consent_handler.py
 
 ## Database Initialization
 
-### 1. Create Database and Tables
+### 1. SQLite (Default for Development)
 
 ```bash
-python setup_database.py --create-tables
-```
+# Initialize the database schema
+python initialize_mysql.py
 
-### 2. Run Database Migrations
-
-```bash
-python setup_database.py --migrations
-```
-
-### 3. Seed Sample Data
-
-```bash
+# Seed the database with sample data
 python seed_database.py
+
+# Verify the database setup
+python verify_database.py
 ```
+
+### 2. MySQL (Recommended for Production)
+
+```bash
+# Set up MySQL database (interactive)
+python setup_mysql.py
+
+# Initialize the database schema
+python initialize_mysql.py
+
+# Seed the database with sample data
+python seed_database.py
+
+# Verify the database setup
+python verify_database.py
+```
+
+### 3. Migrating from SQLite to MySQL
+
+If you've been using SQLite and want to migrate to MySQL:
+
+```bash
+# Set up MySQL database first
+python setup_mysql.py
+
+# Migrate data from SQLite to MySQL
+python migrate_sqlite_to_mysql.py
+```
+
+For detailed database configuration instructions, see [DATABASE_SETUP.md](DATABASE_SETUP.md).
 
 ---
 

@@ -367,7 +367,7 @@ class FeasibilityChecker:
 
         surgery_type = self.surgery_types_cache.get(surgery_type_id)
         if not surgery_type:
-            surgery_type = self.db_session.query(SurgeryType).filter_by(surgery_type_id=surgery_type_id).first()
+            surgery_type = self.db_session.query(SurgeryType).filter_by(type_id=surgery_type_id).first()
             if surgery_type:
                 self.surgery_types_cache[surgery_type_id] = surgery_type
 

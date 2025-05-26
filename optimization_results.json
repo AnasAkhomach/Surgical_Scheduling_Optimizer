@@ -1,0 +1,38 @@
+{
+  "score": 0.3876187957594765,
+  "iterations": 50,
+  "execution_time": 1.6743757724761963,
+  "feasible": true,
+  "assignments": [
+    {
+      "surgery_id": 3,
+      "room_id": 1,
+      "start_time": "2025-05-18T08:15:00",
+      "end_time": "2025-05-18T11:15:00"
+    },
+    {
+      "surgery_id": 5,
+      "room_id": 3,
+      "start_time": "2025-05-18T08:00:00",
+      "end_time": "2025-05-18T10:30:00"
+    },
+    {
+      "surgery_id": 2,
+      "room_id": 3,
+      "start_time": "2025-05-18T10:30:00",
+      "end_time": "2025-05-18T12:30:00"
+    },
+    {
+      "surgery_id": 4,
+      "room_id": 2,
+      "start_time": "2025-05-18T08:30:00",
+      "end_time": "2025-05-18T10:00:00"
+    },
+    {
+      "surgery_id": 1,
+      "room_id": 1,
+      "start_time": "2025-05-18T11:30:00",
+      "end_time": "2025-05-18T12:30:00"
+    }
+  ]
+}
