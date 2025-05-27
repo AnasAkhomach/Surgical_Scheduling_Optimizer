@@ -45,7 +45,7 @@ async def create_surgery(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Surgery type with ID {surgery.surgery_type_id} not found"
         )
-    
+
     # Validate surgeon if provided
     if surgery.surgeon_id:
         surgeon = db.query(Surgeon).filter(Surgeon.surgeon_id == surgery.surgeon_id).first()
@@ -54,7 +54,7 @@ async def create_surgery(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Surgeon with ID {surgery.surgeon_id} not found"
             )
-    
+
     # Validate patient if provided
     if surgery.patient_id:
         patient = db.query(Patient).filter(Patient.patient_id == surgery.patient_id).first()
@@ -63,7 +63,7 @@ async def create_surgery(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Patient with ID {surgery.patient_id} not found"
             )
-    
+
     # Validate room if provided
     if surgery.room_id:
         room = db.query(OperatingRoom).filter(OperatingRoom.room_id == surgery.room_id).first()
@@ -72,7 +72,7 @@ async def create_surgery(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Operating room with ID {surgery.room_id} not found"
             )
-    
+
     # Create new surgery
     db_surgery = Surgery(
         scheduled_date=datetime.now(),  # Default to current date
@@ -86,7 +86,7 @@ async def create_surgery(
         surgeon_id=surgery.surgeon_id,
         room_id=surgery.room_id
     )
-    
+
     try:
         db.add(db_surgery)
         db.commit()
@@ -128,7 +128,7 @@ async def read_surgeries(
         List[Surgery]: List of surgeries
     """
     query = db.query(Surgery)
-    
+
     # Apply filters if provided
     if status:
         query = query.filter(Surgery.status == status)
@@ -138,7 +138,7 @@ async def read_surgeries(
         query = query.filter(Surgery.patient_id == patient_id)
     if room_id:
         query = query.filter(Surgery.room_id == room_id)
-    
+
     surgeries = query.offset(skip).limit(limit).all()
     return surgeries
 
@@ -200,12 +200,12 @@ async def update_surgery(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Surgery not found"
         )
-    
+
     # Update surgery fields
-    update_data = surgery.dict(exclude_unset=True)
+    update_data = surgery.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(db_surgery, key, value)
-    
+
     try:
         db.commit()
         db.refresh(db_surgery)
@@ -241,7 +241,7 @@ async def delete_surgery(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Surgery not found"
         )
-    
+
     db.delete(db_surgery)
     db.commit()
     return None

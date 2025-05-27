@@ -46,7 +46,7 @@ async def create_user(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Username or email already registered"
         )
-    
+
     # Create new user
     hashed_password = get_password_hash(user.password)
     db_user = User(
@@ -57,7 +57,7 @@ async def create_user(
         role=user.role,
         staff_id=user.staff_id
     )
-    
+
     try:
         db.add(db_user)
         db.commit()
@@ -165,11 +165,11 @@ async def update_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
-    
+
     # Update user fields
-    for key, value in user.dict(exclude_unset=True).items():
+    for key, value in user.model_dump(exclude_unset=True).items():
         setattr(db_user, key, value)
-    
+
     try:
         db.commit()
         db.refresh(db_user)
@@ -205,14 +205,14 @@ async def delete_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
-    
+
     # Don't allow deleting the current user
     if db_user.user_id == current_user.user_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot delete your own user account"
         )
-    
+
     db.delete(db_user)
     db.commit()
     return None

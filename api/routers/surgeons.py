@@ -41,7 +41,7 @@ async def create_surgeon(
         credentials=surgeon.credentials,
         availability=surgeon.availability
     )
-    
+
     try:
         db.add(db_surgeon)
         db.commit()
@@ -135,12 +135,12 @@ async def update_surgeon(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Surgeon not found"
         )
-    
+
     # Update surgeon fields
-    update_data = surgeon.dict(exclude_unset=True)
+    update_data = surgeon.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(db_surgeon, key, value)
-    
+
     try:
         db.commit()
         db.refresh(db_surgeon)
@@ -176,7 +176,7 @@ async def delete_surgeon(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Surgeon not found"
         )
-    
+
     db.delete(db_surgeon)
     db.commit()
     return None

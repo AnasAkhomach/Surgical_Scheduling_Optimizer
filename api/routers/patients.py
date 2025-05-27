@@ -40,7 +40,7 @@ async def create_patient(
         contact_info=patient.contact_info,
         privacy_consent=patient.privacy_consent
     )
-    
+
     try:
         db.add(db_patient)
         db.commit()
@@ -134,12 +134,12 @@ async def update_patient(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Patient not found"
         )
-    
+
     # Update patient fields
-    update_data = patient.dict(exclude_unset=True)
+    update_data = patient.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(db_patient, key, value)
-    
+
     try:
         db.commit()
         db.refresh(db_patient)
@@ -175,7 +175,7 @@ async def delete_patient(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Patient not found"
         )
-    
+
     db.delete(db_patient)
     db.commit()
     return None

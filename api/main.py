@@ -7,9 +7,13 @@ This module provides a RESTful API for the surgery scheduling application.
 import os
 import logging
 import sys
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from pydantic import ValidationError
 from dotenv import load_dotenv
 
 # Add parent directory to path
@@ -28,7 +32,10 @@ from api.routers import (
     appointments,
     schedules,
     auth,
-    users
+    users,
+    surgery_types,
+    sdst,
+    websockets
 )
 
 # Load environment variables
@@ -61,6 +68,48 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Error handlers
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle validation errors with detailed field information."""
+    field_errors = {}
+    for error in exc.errors():
+        field = ".".join(str(x) for x in error["loc"][1:])  # Skip 'body' prefix
+        if field not in field_errors:
+            field_errors[field] = []
+        field_errors[field].append(error["msg"])
+
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": "Validation error",
+            "error_code": "VALIDATION_ERROR",
+            "field_errors": field_errors
+        }
+    )
+
+@app.exception_handler(ValueError)
+async def value_error_handler(request: Request, exc: ValueError):
+    """Handle value errors."""
+    return JSONResponse(
+        status_code=400,
+        content={
+            "detail": str(exc),
+            "error_code": "VALUE_ERROR"
+        }
+    )
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(request: Request, exc: IntegrityError):
+    """Handle database integrity errors."""
+    return JSONResponse(
+        status_code=409,
+        content={
+            "detail": "Database constraint violation",
+            "error_code": "INTEGRITY_ERROR"
+        }
+    )
+
 # Initialize database
 @app.on_event("startup")
 async def startup_db_client():
@@ -82,6 +131,9 @@ app.include_router(patients.router, prefix="/api/patients", tags=["Patients"])
 app.include_router(staff.router, prefix="/api/staff", tags=["Staff"])
 app.include_router(appointments.router, prefix="/api/appointments", tags=["Appointments"])
 app.include_router(schedules.router, prefix="/api/schedules", tags=["Schedules"])
+app.include_router(surgery_types.router, prefix="/api/surgery-types", tags=["Surgery Types"])
+app.include_router(sdst.router, prefix="/api/sdst", tags=["SDST"])
+app.include_router(websockets.router, prefix="/api/ws", tags=["WebSockets"])
 
 @app.get("/api/health")
 async def health_check():

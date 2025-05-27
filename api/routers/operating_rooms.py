@@ -35,7 +35,7 @@ async def create_operating_room(
         OperatingRoom: Created operating room
     """
     db_operating_room = OperatingRoom(location=operating_room.location)
-    
+
     try:
         db.add(db_operating_room)
         db.commit()
@@ -129,12 +129,12 @@ async def update_operating_room(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Operating room not found"
         )
-    
+
     # Update operating room fields
-    update_data = operating_room.dict(exclude_unset=True)
+    update_data = operating_room.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(db_operating_room, key, value)
-    
+
     try:
         db.commit()
         db.refresh(db_operating_room)
@@ -170,7 +170,7 @@ async def delete_operating_room(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Operating room not found"
         )
-    
+
     db.delete(db_operating_room)
     db.commit()
     return None

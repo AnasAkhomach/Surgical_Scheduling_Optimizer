@@ -259,6 +259,7 @@ class SurgeryType(Base):
     type_id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(100), nullable=False, unique=True)
     description = Column(Text, nullable=True)
+    average_duration = Column(Integer, nullable=False, default=60)
 
     # Relationship to Surgery, indicating which surgeries are of this type
     surgeries = relationship("Surgery", back_populates="surgery_type_details")
@@ -354,3 +355,27 @@ class AuditLog(Base):
 
     def __repr__(self):
         return f"<AuditLog(log_id={self.log_id}, timestamp={self.timestamp}, action='{self.action}', entity_type='{self.entity_type}', entity_id={self.entity_id})>"
+
+
+class ScheduleHistory(Base):
+    """
+    Schedule history for tracking schedule changes over time.
+
+    This model stores snapshots of schedule changes for audit and rollback purposes.
+    """
+    __tablename__ = "schedulehistory"
+
+    history_id = Column(Integer, primary_key=True, autoincrement=True)
+    schedule_date = Column(Date, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    created_by_user_id = Column(Integer, ForeignKey("user.user_id", ondelete="SET NULL"), nullable=True)
+    action_type = Column(String(50), nullable=False)  # manual_adjustment, optimization, bulk_update
+    changes_summary = Column(Text, nullable=False)
+    affected_surgeries = Column(Text, nullable=True)  # JSON array of surgery IDs
+    schedule_snapshot = Column(Text, nullable=True)  # JSON snapshot of the schedule
+
+    # Relationship to User
+    created_by = relationship("User")
+
+    def __repr__(self):
+        return f"<ScheduleHistory(history_id={self.history_id}, schedule_date={self.schedule_date}, action_type='{self.action_type}')>"
