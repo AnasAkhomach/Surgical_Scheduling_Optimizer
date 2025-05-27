@@ -1,0 +1,49 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`AddOrForm > matches snapshot in add mode 1`] = `
+"<div data-v-4b031d55="" class="add-or-form">
+  <h3 data-v-4b031d55="">Add New Operating Room</h3>
+  <form data-v-4b031d55="">
+    <div data-v-4b031d55="" class="input-group"><label data-v-4b031d55="" for="or-name">Name/ID</label><input data-v-4b031d55="" type="text" id="or-name">
+      <!--v-if-->
+    </div>
+    <div data-v-4b031d55="" class="input-group"><label data-v-4b031d55="" for="or-location">Location</label><input data-v-4b031d55="" type="text" id="or-location"><!-- No validation for location in this example, but can be added -->
+    </div>
+    <div data-v-4b031d55="" class="input-group"><label data-v-4b031d55="" for="or-status">Status</label><select data-v-4b031d55="" id="or-status">
+        <option data-v-4b031d55="" value="">Select Status</option>
+        <option data-v-4b031d55="" value="Active">Active</option>
+        <option data-v-4b031d55="" value="Under Maintenance">Under Maintenance</option>
+        <option data-v-4b031d55="" value="Inactive">Inactive</option>
+      </select>
+      <!--v-if-->
+    </div>
+    <div data-v-4b031d55="" class="input-group"><label data-v-4b031d55="" for="or-service">Primary Service</label><input data-v-4b031d55="" type="text" id="or-service"><!-- No validation for primary service in this example, but can be added -->
+    </div>
+    <div data-v-4b031d55="" class="form-actions"><button data-v-4b031d55="" type="submit" class="button-primary">Save OR</button><button data-v-4b031d55="" type="button" class="button-secondary">Cancel</button></div>
+  </form>
+</div>"
+`;
+
+exports[`AddOrForm > matches snapshot in edit mode 1`] = `
+"<div data-v-4b031d55="" class="add-or-form">
+  <h3 data-v-4b031d55="">Edit Operating Room</h3>
+  <form data-v-4b031d55="">
+    <div data-v-4b031d55="" class="input-group"><label data-v-4b031d55="" for="or-name">Name/ID</label><input data-v-4b031d55="" type="text" id="or-name">
+      <!--v-if-->
+    </div>
+    <div data-v-4b031d55="" class="input-group"><label data-v-4b031d55="" for="or-location">Location</label><input data-v-4b031d55="" type="text" id="or-location"><!-- No validation for location in this example, but can be added -->
+    </div>
+    <div data-v-4b031d55="" class="input-group"><label data-v-4b031d55="" for="or-status">Status</label><select data-v-4b031d55="" id="or-status">
+        <option data-v-4b031d55="" value="">Select Status</option>
+        <option data-v-4b031d55="" value="Active">Active</option>
+        <option data-v-4b031d55="" value="Under Maintenance">Under Maintenance</option>
+        <option data-v-4b031d55="" value="Inactive">Inactive</option>
+      </select>
+      <!--v-if-->
+    </div>
+    <div data-v-4b031d55="" class="input-group"><label data-v-4b031d55="" for="or-service">Primary Service</label><input data-v-4b031d55="" type="text" id="or-service"><!-- No validation for primary service in this example, but can be added -->
+    </div>
+    <div data-v-4b031d55="" class="form-actions"><button data-v-4b031d55="" type="submit" class="button-primary">Update OR</button><button data-v-4b031d55="" type="button" class="button-secondary">Cancel</button></div>
+  </form>
+</div>"
+`;

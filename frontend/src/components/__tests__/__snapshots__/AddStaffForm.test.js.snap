@@ -1,0 +1,63 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`AddStaffForm > matches snapshot in add mode 1`] = `
+"<div data-v-7c00223e="" class="add-staff-form">
+  <h3 data-v-7c00223e="">Add New Staff Member</h3>
+  <form data-v-7c00223e="">
+    <div data-v-7c00223e="" class="input-group"><label data-v-7c00223e="" for="staff-name">Name</label><input data-v-7c00223e="" type="text" id="staff-name">
+      <!--v-if-->
+    </div>
+    <div data-v-7c00223e="" class="input-group"><label data-v-7c00223e="" for="staff-role">Role</label><select data-v-7c00223e="" id="staff-role">
+        <option value="" data-v-7c00223e="">Select Role</option>
+        <option value="Surgeon" data-v-7c00223e="">Surgeon</option>
+        <option value="Nurse" data-v-7c00223e="">Nurse</option>
+        <option value="Anesthetist" data-v-7c00223e="">Anesthetist</option>
+        <option value="Other" data-v-7c00223e="">Other</option>
+      </select>
+      <!--v-if-->
+    </div>
+    <div data-v-7c00223e="" class="input-group"><label data-v-7c00223e="" for="staff-specializations">Specialization(s)</label><input data-v-7c00223e="" type="text" id="staff-specializations"><small data-v-7c00223e="">Enter specializations separated by commas (e.g., Orthopedics, Sports Medicine)</small><!-- Basic validation for specializations can be added if it becomes a strict requirement -->
+    </div>
+    <div data-v-7c00223e="" class="input-group"><label data-v-7c00223e="" for="staff-status">Status</label><select data-v-7c00223e="" id="staff-status">
+        <option data-v-7c00223e="" value="">Select Status</option>
+        <option data-v-7c00223e="" value="Active">Active</option>
+        <option data-v-7c00223e="" value="On Leave">On Leave</option>
+        <option data-v-7c00223e="" value="Inactive">Inactive</option>
+      </select>
+      <!--v-if-->
+    </div>
+    <div data-v-7c00223e="" class="form-actions"><button data-v-7c00223e="" type="submit" class="button-primary">Save Staff</button><button data-v-7c00223e="" type="button" class="button-secondary">Cancel</button></div>
+  </form>
+</div>"
+`;
+
+exports[`AddStaffForm > matches snapshot in edit mode 1`] = `
+"<div data-v-7c00223e="" class="add-staff-form">
+  <h3 data-v-7c00223e="">Edit Staff Member</h3>
+  <form data-v-7c00223e="">
+    <div data-v-7c00223e="" class="input-group"><label data-v-7c00223e="" for="staff-name">Name</label><input data-v-7c00223e="" type="text" id="staff-name">
+      <!--v-if-->
+    </div>
+    <div data-v-7c00223e="" class="input-group"><label data-v-7c00223e="" for="staff-role">Role</label><select data-v-7c00223e="" id="staff-role">
+        <option value="" data-v-7c00223e="">Select Role</option>
+        <option value="Surgeon" data-v-7c00223e="">Surgeon</option>
+        <option value="Nurse" data-v-7c00223e="">Nurse</option>
+        <option value="Anesthetist" data-v-7c00223e="">Anesthetist</option>
+        <option value="Other" data-v-7c00223e="">Other</option>
+      </select>
+      <!--v-if-->
+    </div>
+    <div data-v-7c00223e="" class="input-group"><label data-v-7c00223e="" for="staff-specializations">Specialization(s)</label><input data-v-7c00223e="" type="text" id="staff-specializations"><small data-v-7c00223e="">Enter specializations separated by commas (e.g., Orthopedics, Sports Medicine)</small><!-- Basic validation for specializations can be added if it becomes a strict requirement -->
+    </div>
+    <div data-v-7c00223e="" class="input-group"><label data-v-7c00223e="" for="staff-status">Status</label><select data-v-7c00223e="" id="staff-status">
+        <option data-v-7c00223e="" value="">Select Status</option>
+        <option data-v-7c00223e="" value="Active">Active</option>
+        <option data-v-7c00223e="" value="On Leave">On Leave</option>
+        <option data-v-7c00223e="" value="Inactive">Inactive</option>
+      </select>
+      <!--v-if-->
+    </div>
+    <div data-v-7c00223e="" class="form-actions"><button data-v-7c00223e="" type="submit" class="button-primary">Update Staff</button><button data-v-7c00223e="" type="button" class="button-secondary">Cancel</button></div>
+  </form>
+</div>"
+`;

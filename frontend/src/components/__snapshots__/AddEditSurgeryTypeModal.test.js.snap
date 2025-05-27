@@ -1,0 +1,29 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`AddEditSurgeryTypeModal > matches snapshot in add mode 1`] = `
+"<div data-v-09ed78bd="" class="modal-overlay">
+  <div data-v-09ed78bd="" class="modal-content">
+    <h3 data-v-09ed78bd="">Add New Surgery Type</h3>
+    <form data-v-09ed78bd="">
+      <div data-v-09ed78bd="" class="input-group"><label data-v-09ed78bd="" for="type-name">Name</label><input data-v-09ed78bd="" type="text" id="type-name" required=""></div>
+      <div data-v-09ed78bd="" class="input-group"><label data-v-09ed78bd="" for="type-code">Code (e.g., CABG, TKR)</label><input data-v-09ed78bd="" type="text" id="type-code"></div>
+      <div data-v-09ed78bd="" class="input-group"><label data-v-09ed78bd="" for="type-description">Description</label><textarea data-v-09ed78bd="" id="type-description"></textarea></div>
+      <div data-v-09ed78bd="" class="form-actions"><button data-v-09ed78bd="" type="submit" class="button-primary">Add Type</button><button data-v-09ed78bd="" type="button" class="button-secondary">Cancel</button></div>
+    </form>
+  </div>
+</div>"
+`;
+
+exports[`AddEditSurgeryTypeModal > matches snapshot in edit mode 1`] = `
+"<div data-v-09ed78bd="" class="modal-overlay">
+  <div data-v-09ed78bd="" class="modal-content">
+    <h3 data-v-09ed78bd="">Edit Surgery Type</h3>
+    <form data-v-09ed78bd="">
+      <div data-v-09ed78bd="" class="input-group"><label data-v-09ed78bd="" for="type-name">Name</label><input data-v-09ed78bd="" type="text" id="type-name" required=""></div>
+      <div data-v-09ed78bd="" class="input-group"><label data-v-09ed78bd="" for="type-code">Code (e.g., CABG, TKR)</label><input data-v-09ed78bd="" type="text" id="type-code"></div>
+      <div data-v-09ed78bd="" class="input-group"><label data-v-09ed78bd="" for="type-description">Description</label><textarea data-v-09ed78bd="" id="type-description"></textarea></div>
+      <div data-v-09ed78bd="" class="form-actions"><button data-v-09ed78bd="" type="submit" class="button-primary">Save Changes</button><button data-v-09ed78bd="" type="button" class="button-secondary">Cancel</button></div>
+    </form>
+  </div>
+</div>"
+`;

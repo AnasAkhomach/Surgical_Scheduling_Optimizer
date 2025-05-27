@@ -1,0 +1,101 @@
+The test failures are primarily due to incorrect CSS selectors in the test code and insufficient waiting for DOM updates. Here's how to fix them:
+
+**1. Incorrect Section Selectors:**
+- **Problem:** Tests use `.resource-section:nth-of-type(2/3)` which doesn't exist since only one section is rendered at a time.
+- **Fix:** Use `.resource-section:nth-of-type(1)` for all tabs when active.
+
+**2. Staff/Equipment Tab Tests:**
+```javascript
+// Staff tab tests
+describe('Staff tab', () => {
+  beforeEach(async () => {
+    await wrapper.findAll('.tabs button')[1].trigger('click');
+    await wrapper.vm.$nextTick();
+    await flushPromises();
+
+    // Correct selector to nth-of-type(1)
+    const rowCount = await waitForTableContent(
+      wrapper,
+      '.resource-section:nth-of-type(1)',
+      resourceStore.staff.length
+    );
+    // ... rest unchanged
+  });
+
+  it('displays the Staff table with correct columns', () => {
+    // Correct selector
+    const staffSection = wrapper.find('.resource-section:nth-of-type(1)');
+    // ... rest unchanged
+  });
+});
+
+// Equipment tab tests
+describe('Equipment tab', () => {
+  beforeEach(async () => {
+    await wrapper.findAll('.tabs button')[2].trigger('click');
+    await wrapper.vm.$nextTick();
+    await flushPromises();
+
+    // Correct selector
+    const rowCount = await waitForTableContent(
+      wrapper,
+      '.resource-section:nth-of-type(1)',
+      resourceStore.equipment.length
+    );
+    // ... rest unchanged
+  });
+
+  it('displays the Equipment table with correct columns', () => {
+    // Correct selector
+    const equipmentSection = wrapper.find('.resource-section:nth-of-type(1)');
+    // ... rest unchanged
+  });
+});
+```
+
+**3. Tab Switching Tests:**
+```javascript
+it('switches to Staff tab when clicked', async () => {
+  await wrapper.findAll('.tabs button')[1].trigger('click');
+  await wrapper.vm.$nextTick();
+  await flushPromises();
+
+  expect(wrapper.find('.tabs button.active').text()).toBe('Staff');
+  // Correct selector
+  const staffSection = wrapper.find('.resource-section:nth-of-type(1)');
+  expect(staffSection.find('h2').text()).toBe('Staff List');
+});
+
+it('switches to Equipment tab when clicked', async () => {
+  await wrapper.findAll('.tabs button')[2].trigger('click');
+  await wrapper.vm.$nextTick();
+  await flushPromises();
+
+  expect(wrapper.find('.tabs button.active').text()).toBe('Equipment');
+  // Correct selector
+  const equipmentSection = wrapper.find('.resource-section:nth-of-type(1)');
+  expect(equipmentSection.find('h2').text()).toBe('Equipment List');
+});
+```
+
+**4. Deletion Confirmation Tests:**
+Update selectors in deletion tests to use `.resource-section:nth-of-type(1)` when checking tables.
+
+**5. Form Visibility Test:**
+Ensure the correct section is checked after form toggle:
+```javascript
+it('hides the OR table when the form is shown', async () => {
+  const orSection = wrapper.find('.resource-section:nth-of-type(1)');
+  await orSection.find('button.button-primary').trigger('click');
+  expect(orSection.find('table').exists()).toBe(false); // Should now work
+});
+```
+
+**6. Increase Timeout for Slow Renders:**
+In `waitForTableContent`, consider increasing the timeout for Staff/Equipment tabs if needed.
+
+**Why These Fixes Work:**
+- The component uses `v-if` for sections, rendering only one `.resource-section` at a time. Using `nth-of-type(1)` correctly targets the active section.
+- Proper waiting ensures Vue updates the DOM and renders tables after state changes.
+
+After applying these changes, the tests should correctly find the rendered tables and forms, resolving the majority of the failures.

@@ -1,0 +1,191 @@
+Okay, this is a common scenario with testing complex components involving asynchronous operations, conditional rendering (v-if), and state management (Pinia). Let's break down the failures and how to address them.
+
+**Key Observations from the Test Output:**
+
+1.  **`Failed to render Staff table. Expected 8 rows, got 0` (and similar for Equipment):** This is a major clue. Your `waitForTableContent` helper is correctly identifying that the data isn't appearing in the DOM for the Staff and Equipment tabs, even though your `INITIAL_STATE` clearly provides this data.
+2.  **`Cannot call find on an empty DOMWrapper`:** This typically means the element you're trying to `find` (e.g., `staffSection` or `equipmentSection`) doesn't exist at that moment in the test.
+3.  **`expected false to be true // Object.is equality` (when checking `section.exists()`):** This is related to point 2. The test expects a section (like Staff or Equipment) to exist, but it doesn't.
+4.  **`expected true to be false // Object.is equality` (e.g., "hides the OR table", "adds a new OR"):** These indicate that a state change (like hiding a table or a form) didn't happen as expected.
+5.  **The `nth-of-type` Selector Issue:** Your component uses `v-if` to render *only one* resource section at a time:
+    ```html
+    <div v-if="activeTab === 'ors'" class="resource-section">...</div>
+    <div v-if="activeTab === 'staff'" class="resource-section">...</div>
+    <div v-if="activeTab === 'equipment'" class="resource-section">...</div>
+    ```
+    This means that whichever tab is active, its corresponding `div.resource-section` will be the *first and only* `div.resource-section` within its parent (`.tab-content`). Therefore, selectors like `.resource-section:nth-of-type(2)` or `:nth-of-type(3)` will **never** find anything. The active section will always be matched by `.resource-section:nth-of-type(1)` (or simply `.resource-section` if you're sure there's only one). This is the root cause of many of your failures.
+
+**Let's Address the Failures Systematically:**
+
+**Category 1: Failures due to incorrect `nth-of-type` selectors (Affects Staff & Equipment tabs primarily)**
+
+* **Tests:**
+    * `switches to Staff tab when clicked`
+    * `switches to Equipment tab when clicked`
+    * `Staff tab > displays the Staff table with correct columns`
+    * `Staff tab > displays the initial staff data correctly`
+    * `Staff tab > shows the Add Staff form when Add New Staff button is clicked`
+    * `Equipment tab > displays the Equipment table with correct columns`
+    * `Equipment tab > displays the initial equipment data correctly`
+    * `Equipment tab > shows the Add Equipment form when Add New Equipment button is clicked`
+    * `Deletion confirmation > Staff deletion confirmation > should show confirmation modal...` (the `waitForTableContent` in its `beforeEach` fails)
+    * `Deletion confirmation > Equipment deletion confirmation > should show confirmation modal...` (the `waitForTableContent` in its `beforeEach` fails)
+
+* **Reason:** When the Staff tab is active, `wrapper.find('.resource-section:nth-of-type(2)')` finds nothing because the Staff section is effectively the *first* `.resource-section` present in the DOM. Same for Equipment with `nth-of-type(3)`.
+
+* **Solution:**
+    1.  **Change Selectors:** For Staff and Equipment tests, when you try to find their respective sections, use a selector that correctly identifies them. Since only one section is rendered at a time, `.resource-section` (or `.resource-section:nth-of-type(1)`) would target the currently active section.
+        To be more robust and clear, it's better to select based on content if possible or add `data-testid` attributes. For instance, after clicking the Staff tab:
+        ```javascript
+        // Option A: Generic (if only one .resource-section is ever visible)
+        const staffSection = wrapper.find('.resource-section');
+        // Option B: More specific (recommended)
+        // Add data-testid="staff-section" to your staff div in the component template
+        // const staffSection = wrapper.find('[data-testid="staff-section"]');
+        // Option C: Based on unique content within the section
+        const staffSection = wrapper.find('.resource-section:has(h2:contains("Staff List"))');
+        ```
+    2.  Apply this corrected selector logic to all tests and `beforeEach` blocks related to the Staff and Equipment tabs.
+
+    **Example fix for `waitForTableContent` in Staff/Equipment `beforeEach` blocks:**
+    ```javascript
+    // In Staff tab's beforeEach
+    const staffSectionSelector = '.resource-section:has(h2:contains("Staff List"))'; // Or simply '.resource-section'
+    const rowCount = await waitForTableContent(
+        wrapper,
+        staffSectionSelector,
+        resourceStore.staff.length
+    );
+    if (rowCount < resourceStore.staff.length) {
+        console.error(`Failed to render Staff table. Expected ${resourceStore.staff.length} rows, got ${rowCount}. HTML of section: ${wrapper.find(staffSectionSelector).exists() ? wrapper.find(staffSectionSelector).html() : 'Section not found'}`);
+    }
+
+    // In Equipment tab's beforeEach
+    const equipmentSectionSelector = '.resource-section:has(h2:contains("Equipment List"))'; // Or simply '.resource-section'
+    const rowCountEq = await waitForTableContent(
+        wrapper,
+        equipmentSectionSelector,
+        resourceStore.equipment.length
+    );
+    if (rowCountEq < resourceStore.equipment.length) {
+        console.error(`Failed to render Equipment table. Expected ${resourceStore.equipment.length} rows, got ${rowCountEq}. HTML of section: ${wrapper.find(equipmentSectionSelector).exists() ? wrapper.find(equipmentSectionSelector).html() : 'Section not found'}`);
+    }
+    ```
+    And in the tests themselves:
+    ```javascript
+    // Staff tab tests
+    it('displays the Staff table with correct columns', async () => {
+        // await ... (tab switch and waits from beforeEach)
+        const staffSection = wrapper.find('.resource-section:has(h2:contains("Staff List"))'); // Corrected selector
+        expect(staffSection.exists()).toBe(true);
+        // ... rest of the assertions
+    });
+    ```
+
+**Category 2: Logic Error in Component or Test Assertion**
+
+* **Test:** `Operating Rooms tab > hides the OR table when the form is shown`
+    * `AssertionError: expected true to be false // Object.is equality`
+    * `expect(orSection.find('table').exists()).toBe(false);` (Line 201)
+
+* **Reason:** Your component template for the OR section looks like this:
+    ```html
+    <AddOrForm v-if="showAddOrForm" ... />
+    <div v-if="isLoading" class="loading-indicator"> ... </div>
+    <table v-else> ... </table>
+    ```
+    When `showAddOrForm` is `true`, the `AddOrForm` is displayed. However, the table's visibility is controlled by `isLoading`. If `isLoading` is `false` (which it would be after initial load), the table will *always* be shown by the `v-else`, regardless of `showAddOrForm`'s value. The test expects the table to be hidden, but the component logic doesn't do that.
+
+* **Solution (Component Change):** Modify the component to hide the table when the form is shown.
+    ```html
+    <div v-if="activeTab === 'ors'" class="resource-section">
+      <h2>Operating Rooms List</h2>
+      <button class="button-primary" @click="openOrFormForAdd" v-if="!showAddOrForm && !isLoading">Add New OR</button> <AddOrForm
+        v-if="showAddOrForm"
+        :or-to-edit="currentOrToEdit"
+        @cancel="handleCancelOrForm"
+        @save="handleSaveOr"
+      />
+      <div v-if="isLoading" class="loading-indicator">
+        </div>
+      <table v-else-if="!showAddOrForm">
+        <thead>
+          </thead>
+        <tbody>
+          </tbody>
+      </table>
+      <div v-else-if="showAddOrForm" class="form-is-active-placeholder">
+        </div>
+    </div>
+    ```
+    This change will make `orSection.find('table').exists()` be `false` when `showAddOrForm` is `true` and `isLoading` is `false`.
+
+* **Test:** `Form submissions > adds a new OR when form is submitted`
+    * `AssertionError: expected true to be false // Object.is equality`
+    * `expect(fullWrapper.findComponent(AddOrForm).exists()).toBe(false);` (Line 348)
+
+* **Reason:** The test expects the `AddOrForm` to disappear after saving. The component logic is `showAddOrForm.value = false;` inside `handleSaveOr`. This should work.
+    Possible issues:
+    1.  The `save` event from `AddOrForm` isn't being handled correctly, or `handleSaveOr` has an early exit/error.
+    2.  The `addOperatingRoom` Pinia action might be failing or not resolving in a way that allows `showAddOrForm.value = false` to execute or be reactive in time. Since `stubActions: false` is used for `localPinia`, the actual store action is called.
+    3.  Reactivity timing.
+
+* **Solution:**
+    1.  Ensure your `resourceStore.addOperatingRoom` action actually updates the `operatingRooms` array in the store state reactively and returns a success object as expected by `handleSaveOr`.
+    2.  Add more debug logging inside `handleSaveOr` in your component to see if it reaches `showAddOrForm.value = false;`.
+    3.  The sequence `await flushPromises(); await fullWrapper.vm.$nextTick();` after emitting save is generally correct.
+    4.  This might also benefit from the selector fixes if any part of this test was inadvertently relying on `nth-of-type` for sections. However, this specific assertion is about the form component itself.
+
+* **Test:** `Deletion confirmation > should show confirmation modal on deleting an OR`
+    * `AssertionError: expected false to be true // Object.is equality`
+    * `expect(orSection.find('table').exists()).toBe(true);` (Line 387)
+    * This assertion fails *before* the delete button is clicked. It means the OR table isn't even found at the beginning of this specific test.
+
+* **Reason:** This `describe` block for "Deletion confirmation" creates a new `orWrapper` and `localPiniaInstance`. The `beforeEach` for the top-level `ResourceManagementScreen` describe block (which has `waitForTableContent` for ORs) does *not* run for this isolated `orWrapper`. You need to ensure the OR table is rendered in this test's context too.
+    The test code does `await flushPromises(); await orWrapper.vm.$nextTick();` which should allow `onMounted` and `loadResources` to run. The `INITIAL_STATE` provides OR data.
+
+* **Solution:** Add a `waitForTableContent` call specific to this `orWrapper` instance before proceeding with the assertions, similar to how it's done in the main `beforeEach`.
+    ```javascript
+    describe('Deletion confirmation', () => {
+      it('should show confirmation modal on deleting an OR', async () => {
+        // ... (pinia and wrapper setup) ...
+
+        await flushPromises();
+        await orWrapper.vm.$nextTick();
+
+        // ADD THIS: Wait for the OR table in this specific test context
+        const orStore = useResourceStore(localPiniaInstance); // Get store for this instance
+        const orRowCount = await waitForTableContent(
+          orWrapper,
+          '.resource-section:nth-of-type(1)', // OR section is indeed nth-of-type(1)
+          orStore.operatingRooms.length,
+          3000 // timeout
+        );
+        if (orRowCount < orStore.operatingRooms.length) {
+            console.error(`OR Deletion Test: Failed to render OR table. Expected ${orStore.operatingRooms.length}, got ${orRowCount}`);
+        }
+
+        const orSection = orWrapper.find('.resource-section:nth-of-type(1)');
+        expect(orSection.find('table').exists()).toBe(true); // Should pass now
+
+        // ... rest of the test
+      });
+    // ...
+    });
+    ```
+
+**General Advice for Asynchronous Tests in Vue Test Utils:**
+
+1.  **`await flushPromises()`:** Use after any action that might trigger asynchronous updates that are promise-based (like Pinia actions if they are async).
+2.  **`await wrapper.vm.$nextTick()`:** Use after an action that changes reactive data to ensure Vue has completed its DOM update cycle.
+3.  **`waitForX` helpers:** Your `waitForTableContent` is good. Sometimes you might need to wait for an element to appear/disappear more generally. Vue Test Utils doesn't have a built-in `waitFor` like Testing Library, so custom helpers or repeated checks with timeouts (like your `waitForTableContent`) are necessary.
+4.  **Debugging with `wrapper.html()`:** When a `find` fails or an element isn't as expected, log `wrapper.html()` or `section.html()` to see the actual DOM structure the test is working with. Your `console.error` lines in `waitForTableContent` are a good start.
+5.  **Pinia Store State:** In failing tests, you can also log `resourceStore.$state` to check if the Pinia store has the data you expect at that point in the test.
+
+**Summary of Key Actions:**
+
+1.  **Critical Fix:** Change all `.resource-section:nth-of-type(2)` and `.resource-section:nth-of-type(3)` selectors. Use `.resource-section` (if you are sure only one is active) or a more specific selector like `.resource-section:has(h2:contains("Staff List"))` or `[data-testid="unique-section-id"]`. This will resolve the bulk of the Staff and Equipment tab failures.
+2.  **Component Logic Fix:** Modify the OR section in `ResourceManagementScreen.vue` so the table is hidden when `showAddOrForm` is true (and not loading).
+3.  **Test Setup for Deletion:** Ensure the OR table is explicitly waited for in the "Deletion confirmation" test for ORs, as it uses a separate wrapper instance.
+4.  **Review Form Submission:** If the "adds a new OR" test still fails after other fixes, investigate the `addOperatingRoom` Pinia action and the reactivity chain that should hide the form.
+
+Start with the selector changes (Point 1), as this is the most impactful and widespread issue. Then move to the component logic for hiding the OR table. Good luck!

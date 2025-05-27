@@ -1,0 +1,6 @@
+import vueJs from 'eslint-plugin-vue';
+
+export default [
+  // add more configurations here
+  vueJs.configs['flat/recommended'],
+];

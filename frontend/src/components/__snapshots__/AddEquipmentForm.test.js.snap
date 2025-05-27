@@ -1,0 +1,53 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`AddEquipmentForm > matches snapshot in add mode 1`] = `
+"<div data-v-509ecb30="" class="add-equipment-form">
+  <h3 data-v-509ecb30="">Add New Equipment</h3>
+  <form data-v-509ecb30="">
+    <div data-v-509ecb30="" class="input-group"><label data-v-509ecb30="" for="equipment-name">Name/ID</label><input data-v-509ecb30="" type="text" id="equipment-name">
+      <!--v-if-->
+    </div>
+    <div data-v-509ecb30="" class="input-group"><label data-v-509ecb30="" for="equipment-type">Type</label><input data-v-509ecb30="" type="text" id="equipment-type">
+      <!--v-if-->
+    </div>
+    <div data-v-509ecb30="" class="input-group"><label data-v-509ecb30="" for="equipment-status">Status</label><select data-v-509ecb30="" id="equipment-status">
+        <option value="" data-v-509ecb30="">Select Status</option>
+        <option value="Available" data-v-509ecb30="">Available</option>
+        <option value="In Use" data-v-509ecb30="">In Use</option>
+        <option value="Maintenance" data-v-509ecb30="">Maintenance</option>
+        <option value="Retired" data-v-509ecb30="">Retired</option>
+      </select>
+      <!--v-if-->
+    </div>
+    <div data-v-509ecb30="" class="input-group"><label data-v-509ecb30="" for="equipment-location">Location</label><input data-v-509ecb30="" type="text" id="equipment-location"><small data-v-509ecb30="">E.g., OR 5, Storage Room B</small><!-- Location is optional, so no specific validation message for being empty -->
+    </div>
+    <div data-v-509ecb30="" class="form-actions"><button data-v-509ecb30="" type="submit" class="button-primary">Save Equipment</button><button data-v-509ecb30="" type="button" class="button-secondary">Cancel</button></div>
+  </form>
+</div>"
+`;
+
+exports[`AddEquipmentForm > matches snapshot in edit mode 1`] = `
+"<div data-v-509ecb30="" class="add-equipment-form">
+  <h3 data-v-509ecb30="">Edit Equipment</h3>
+  <form data-v-509ecb30="">
+    <div data-v-509ecb30="" class="input-group"><label data-v-509ecb30="" for="equipment-name">Name/ID</label><input data-v-509ecb30="" type="text" id="equipment-name">
+      <!--v-if-->
+    </div>
+    <div data-v-509ecb30="" class="input-group"><label data-v-509ecb30="" for="equipment-type">Type</label><input data-v-509ecb30="" type="text" id="equipment-type">
+      <!--v-if-->
+    </div>
+    <div data-v-509ecb30="" class="input-group"><label data-v-509ecb30="" for="equipment-status">Status</label><select data-v-509ecb30="" id="equipment-status">
+        <option value="" data-v-509ecb30="">Select Status</option>
+        <option value="Available" data-v-509ecb30="">Available</option>
+        <option value="In Use" data-v-509ecb30="">In Use</option>
+        <option value="Maintenance" data-v-509ecb30="">Maintenance</option>
+        <option value="Retired" data-v-509ecb30="">Retired</option>
+      </select>
+      <!--v-if-->
+    </div>
+    <div data-v-509ecb30="" class="input-group"><label data-v-509ecb30="" for="equipment-location">Location</label><input data-v-509ecb30="" type="text" id="equipment-location"><small data-v-509ecb30="">E.g., OR 5, Storage Room B</small><!-- Location is optional, so no specific validation message for being empty -->
+    </div>
+    <div data-v-509ecb30="" class="form-actions"><button data-v-509ecb30="" type="submit" class="button-primary">Update Equipment</button><button data-v-509ecb30="" type="button" class="button-secondary">Cancel</button></div>
+  </form>
+</div>"
+`;

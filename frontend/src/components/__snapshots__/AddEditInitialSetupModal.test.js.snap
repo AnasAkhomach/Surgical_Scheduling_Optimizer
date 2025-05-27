@@ -1,0 +1,42 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`AddEditInitialSetupModal > matches snapshot in add mode 1`] = `
+"<div data-v-60ea9dff="" class="modal-overlay">
+  <div data-v-60ea9dff="" class="modal-content">
+    <h3 data-v-60ea9dff="">Add New Initial Setup Time</h3>
+    <form data-v-60ea9dff="">
+      <div data-v-60ea9dff="" class="input-group"><label data-v-60ea9dff="" for="setup-type">Surgery Type</label><!-- Dropdown to select surgery type -->
+        <!-- This dropdown should be populated by surgery types passed from the parent --><select data-v-60ea9dff="" id="setup-type" required="">
+          <!-- Disable type selection when editing -->
+          <option data-v-60ea9dff="" value="">Select Surgery Type</option><!-- Options will be populated via v-for on a prop -->
+          <option data-v-60ea9dff="" value="1">Surgery Type A</option>
+          <option data-v-60ea9dff="" value="2">Surgery Type B</option>
+        </select>
+        <!--v-if-->
+      </div>
+      <div data-v-60ea9dff="" class="input-group"><label data-v-60ea9dff="" for="setup-time">Initial Setup Time (minutes)</label><input data-v-60ea9dff="" type="number" id="setup-time" required="" min="0"></div>
+      <div data-v-60ea9dff="" class="form-actions"><button data-v-60ea9dff="" type="submit" class="button-primary">Add Setup Time</button><button data-v-60ea9dff="" type="button" class="button-secondary">Cancel</button></div>
+    </form>
+  </div>
+</div>"
+`;
+
+exports[`AddEditInitialSetupModal > matches snapshot in edit mode 1`] = `
+"<div data-v-60ea9dff="" class="modal-overlay">
+  <div data-v-60ea9dff="" class="modal-content">
+    <h3 data-v-60ea9dff="">Edit Initial Setup Time</h3>
+    <form data-v-60ea9dff="">
+      <div data-v-60ea9dff="" class="input-group"><label data-v-60ea9dff="" for="setup-type">Surgery Type</label><!-- Dropdown to select surgery type -->
+        <!-- This dropdown should be populated by surgery types passed from the parent --><select data-v-60ea9dff="" id="setup-type" required="" disabled="">
+          <!-- Disable type selection when editing -->
+          <option data-v-60ea9dff="" value="">Select Surgery Type</option><!-- Options will be populated via v-for on a prop -->
+          <option data-v-60ea9dff="" value="1">Surgery Type A</option>
+          <option data-v-60ea9dff="" value="2">Surgery Type B</option>
+        </select><small data-v-60ea9dff="">Cannot change Surgery Type when editing.</small>
+      </div>
+      <div data-v-60ea9dff="" class="input-group"><label data-v-60ea9dff="" for="setup-time">Initial Setup Time (minutes)</label><input data-v-60ea9dff="" type="number" id="setup-time" required="" min="0"></div>
+      <div data-v-60ea9dff="" class="form-actions"><button data-v-60ea9dff="" type="submit" class="button-primary">Save Changes</button><button data-v-60ea9dff="" type="button" class="button-secondary">Cancel</button></div>
+    </form>
+  </div>
+</div>"
+`;

@@ -1,0 +1,13 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ConfirmationModal > matches snapshot when shown 1`] = `
+"<div data-v-67e05d21="" class="modal-overlay">
+  <div data-v-67e05d21="" class="modal-content">
+    <h3 data-v-67e05d21="">Test Title</h3>
+    <div data-v-67e05d21="" class="modal-body">
+      <p data-v-67e05d21="">Test Message</p>
+    </div>
+    <div data-v-67e05d21="" class="form-actions"><button data-v-67e05d21="" type="button" class="button-danger">Confirm</button><button data-v-67e05d21="" type="button" class="button-secondary">Cancel</button></div>
+  </div>
+</div>"
+`;
