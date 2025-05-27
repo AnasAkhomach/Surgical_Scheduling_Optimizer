@@ -14,11 +14,12 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      // Proxy API requests to backend server
+      // Proxy API requests to FastAPI backend server
       '/api': {
-        target: 'http://localhost:3000', // Replace with your actual backend server address
+        target: 'http://localhost:8000', // FastAPI backend server
         changeOrigin: true,
-        // rewrite: (path) => path.replace(/^\/api/, '') // Uncomment if your backend doesn't expect /api prefix
+        secure: false,
+        // Keep /api prefix as FastAPI expects it
       }
     }
   }

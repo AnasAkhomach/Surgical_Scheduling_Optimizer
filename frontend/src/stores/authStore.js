@@ -1,11 +1,13 @@
 // src/stores/authStore.js
 import { defineStore } from 'pinia';
 import router from '@/router'; // Import the router instance
+import { authAPI } from '@/services/api'; // Import API service
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     isAuthenticated: localStorage.getItem('isAuthenticated') === 'true', // Load initial state from local storage
     user: JSON.parse(localStorage.getItem('user') || 'null'), // Load user info from local storage
+    token: localStorage.getItem('authToken') || null, // Store auth token
     isLoading: false,
     error: null,
   }),
@@ -18,26 +20,32 @@ export const useAuthStore = defineStore('auth', {
       this.isLoading = true;
       this.error = null;
 
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
       try {
-        // Mocked login logic
-        if (username === 'test@example.com' && password === 'password') {
-          const mockUser = { id: 1, username: 'test@example.com', name: 'Test User' };
-          this.isAuthenticated = true;
-          this.user = mockUser;
-          localStorage.setItem('isAuthenticated', 'true');
-          localStorage.setItem('user', JSON.stringify(mockUser));
-          router.push({ name: 'Dashboard' });
-        } else {
-          throw new Error('Invalid mock credentials');
-        }
+        // Call real API
+        const response = await authAPI.login(username, password);
+
+        // Store authentication data
+        this.token = response.access_token;
+        this.isAuthenticated = true;
+
+        // Get user info
+        const userInfo = await authAPI.getCurrentUser();
+        this.user = userInfo;
+
+        // Store in localStorage
+        localStorage.setItem('authToken', this.token);
+        localStorage.setItem('isAuthenticated', 'true');
+        localStorage.setItem('user', JSON.stringify(this.user));
+
+        // Navigate to dashboard
+        router.push({ name: 'Dashboard' });
       } catch (error) {
-        console.error('Mock Login error:', error);
-        this.error = error.message;
+        console.error('Login error:', error);
+        this.error = error.message || 'Login failed';
         this.isAuthenticated = false;
         this.user = null;
+        this.token = null;
+        localStorage.removeItem('authToken');
         localStorage.removeItem('isAuthenticated');
         localStorage.removeItem('user');
       } finally {
@@ -50,24 +58,19 @@ export const useAuthStore = defineStore('auth', {
       this.error = null;
       let success = false;
 
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
       try {
-        // Mocked registration logic
-        // For simplicity, let's assume registration is always successful for a new user
-        // or fails if username is already 'test@example.com'
-        if (username === 'test@example.com') {
-          throw new Error('Mock: Username already exists.');
-        }
+        // Call real API
+        await authAPI.register({
+          username,
+          password,
+          email: username, // Assuming username is email
+        });
 
-        // You could add to a mock user list in localStorage if needed for more complex simulation
-        // For now, just simulate success
-        console.log('Mock Registration successful for:', username, '. Please log in.');
+        console.log('Registration successful for:', username, '. Please log in.');
         success = true;
       } catch (error) {
-        console.error('Mock Registration error:', error);
-        this.error = error.message;
+        console.error('Registration error:', error);
+        this.error = error.message || 'Registration failed';
         success = false;
       } finally {
         this.isLoading = false;
@@ -80,11 +83,12 @@ export const useAuthStore = defineStore('auth', {
       // Clear auth state
       this.isAuthenticated = false;
       this.user = null;
+      this.token = null;
       this.error = null; // Clear any lingering errors
       // Remove auth data from local storage
       localStorage.removeItem('isAuthenticated');
       localStorage.removeItem('user');
-      // localStorage.removeItem('authToken'); // Clear token if used
+      localStorage.removeItem('authToken');
 
       // Redirect to login page
       router.push({ name: 'Login' }); // Use router instance
