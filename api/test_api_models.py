@@ -58,12 +58,12 @@ def test_enum_values():
     assert SurgeryStatus.IN_PROGRESS == "In Progress"
     assert SurgeryStatus.COMPLETED == "Completed"
     assert SurgeryStatus.CANCELLED == "Cancelled"
-    
+
     # Test AppointmentStatus enum
     assert AppointmentStatus.SCHEDULED == "Scheduled"
     assert AppointmentStatus.COMPLETED == "Completed"
     assert AppointmentStatus.CANCELLED == "Cancelled"
-    
+
     # Test UrgencyLevel enum
     assert UrgencyLevel.LOW == "Low"
     assert UrgencyLevel.MEDIUM == "Medium"
@@ -79,7 +79,7 @@ def test_base_models():
     assert patient.dob == date(1980, 1, 1)
     assert patient.privacy_consent is True
     assert patient.contact_info is None
-    
+
     # Test SurgeonBase model
     surgeon = SurgeonBase(
         name="Dr. Test",
@@ -91,7 +91,7 @@ def test_base_models():
     assert surgeon.credentials == "MD"
     assert surgeon.contact_info is None
     assert surgeon.availability is True
-    
+
     # Test StaffBase model
     staff = StaffBase(name="Test Staff", role="Nurse")
     assert staff.name == "Test Staff"
@@ -99,11 +99,11 @@ def test_base_models():
     assert staff.contact_info is None
     assert staff.specialization is None
     assert staff.availability is True
-    
+
     # Test OperatingRoomBase model
     room = OperatingRoomBase(location="Test Room")
     assert room.location == "Test Room"
-    
+
     # Test SurgeryBase model
     surgery = SurgeryBase(
         surgery_type_id=1,
@@ -119,13 +119,13 @@ def test_base_models():
     assert surgery.start_time is None
     assert surgery.end_time is None
     assert surgery.status == SurgeryStatus.SCHEDULED
-    
+
     # Test SurgeryTypeBase model
     surgery_type = SurgeryTypeBase(name="Test Surgery Type", average_duration=60)
     assert surgery_type.name == "Test Surgery Type"
     assert surgery_type.average_duration == 60
     assert surgery_type.description is None
-    
+
     # Test AppointmentBase model
     appointment = AppointmentBase(
         patient_id=1,
@@ -137,7 +137,7 @@ def test_base_models():
     assert appointment.room_id is None
     assert appointment.status == AppointmentStatus.SCHEDULED
     assert appointment.notes is None
-    
+
     # Test UserBase model
     user = UserBase(username="testuser", email="test@example.com", role="admin")
     assert user.username == "testuser"
@@ -154,7 +154,7 @@ def test_create_models():
     assert patient.name == "Test Patient"
     assert patient.dob == date(1980, 1, 1)
     assert patient.privacy_consent is True
-    
+
     # Test SurgeonCreate model
     surgeon = SurgeonCreate(
         name="Dr. Test",
@@ -164,16 +164,16 @@ def test_create_models():
     assert surgeon.name == "Dr. Test"
     assert surgeon.specialization == "Cardiology"
     assert surgeon.credentials == "MD"
-    
+
     # Test StaffCreate model
     staff = StaffCreate(name="Test Staff", role="Nurse")
     assert staff.name == "Test Staff"
     assert staff.role == "Nurse"
-    
+
     # Test OperatingRoomCreate model
     room = OperatingRoomCreate(location="Test Room")
     assert room.location == "Test Room"
-    
+
     # Test SurgeryCreate model
     surgery = SurgeryCreate(
         surgery_type_id=1,
@@ -183,12 +183,12 @@ def test_create_models():
     assert surgery.surgery_type_id == 1
     assert surgery.duration_minutes == 60
     assert surgery.urgency_level == UrgencyLevel.MEDIUM
-    
+
     # Test SurgeryTypeCreate model
     surgery_type = SurgeryTypeCreate(name="Test Surgery Type", average_duration=60)
     assert surgery_type.name == "Test Surgery Type"
     assert surgery_type.average_duration == 60
-    
+
     # Test AppointmentCreate model
     appointment = AppointmentCreate(
         patient_id=1,
@@ -197,7 +197,7 @@ def test_create_models():
     )
     assert appointment.patient_id == 1
     assert appointment.surgeon_id == 1
-    
+
     # Test UserCreate model
     user = UserCreate(username="testuser", email="test@example.com", password="password", role="admin")
     assert user.username == "testuser"
@@ -219,7 +219,7 @@ def test_response_models():
     assert patient.name == "Test Patient"
     assert patient.dob == date(1980, 1, 1)
     assert patient.privacy_consent is True
-    
+
     # Test Surgeon model
     surgeon = Surgeon(
         surgeon_id=1,
@@ -231,7 +231,7 @@ def test_response_models():
     assert surgeon.name == "Dr. Test"
     assert surgeon.specialization == "Cardiology"
     assert surgeon.credentials == "MD"
-    
+
     # Test Staff model
     staff = Staff(
         staff_id=1,
@@ -241,7 +241,7 @@ def test_response_models():
     assert staff.staff_id == 1
     assert staff.name == "Test Staff"
     assert staff.role == "Nurse"
-    
+
     # Test OperatingRoom model
     room = OperatingRoom(
         room_id=1,
@@ -249,17 +249,17 @@ def test_response_models():
     )
     assert room.room_id == 1
     assert room.location == "Test Room"
-    
+
     # Test SurgeryType model
     surgery_type = SurgeryType(
-        surgery_type_id=1,
+        type_id=1,
         name="Test Surgery Type",
         average_duration=60
     )
-    assert surgery_type.surgery_type_id == 1
+    assert surgery_type.type_id == 1
     assert surgery_type.name == "Test Surgery Type"
     assert surgery_type.average_duration == 60
-    
+
     # Test Surgery model
     surgery = Surgery(
         surgery_id=1,
@@ -271,7 +271,7 @@ def test_response_models():
     assert surgery.surgery_type_id == 1
     assert surgery.duration_minutes == 60
     assert surgery.urgency_level == UrgencyLevel.MEDIUM
-    
+
     # Test Appointment model
     appointment = Appointment(
         appointment_id=1,
@@ -282,7 +282,7 @@ def test_response_models():
     assert appointment.appointment_id == 1
     assert appointment.patient_id == 1
     assert appointment.surgeon_id == 1
-    
+
     # Test User model
     user = User(
         user_id=1,
@@ -305,12 +305,12 @@ def test_token_models():
     token = Token(access_token="test-token", token_type="bearer")
     assert token.access_token == "test-token"
     assert token.token_type == "bearer"
-    
+
     # Test TokenData model
     token_data = TokenData(username="testuser", role="admin")
     assert token_data.username == "testuser"
     assert token_data.role == "admin"
-    
+
     # Test TokenData model with defaults
     token_data = TokenData()
     assert token_data.username is None
@@ -324,7 +324,7 @@ def test_update_models():
     assert patient.name == "Updated Patient"
     assert patient.contact_info == "updated@example.com"
     assert patient.privacy_consent is None
-    
+
     # Test SurgeonUpdate model
     surgeon = SurgeonUpdate(
         name="Dr. Updated",
@@ -335,7 +335,7 @@ def test_update_models():
     assert surgeon.credentials is None
     assert surgeon.contact_info is None
     assert surgeon.availability is None
-    
+
     # Test StaffUpdate model
     staff = StaffUpdate(name="Updated Staff", role="Updated Role")
     assert staff.name == "Updated Staff"
@@ -343,11 +343,11 @@ def test_update_models():
     assert staff.contact_info is None
     assert staff.specialization is None
     assert staff.availability is None
-    
+
     # Test OperatingRoomUpdate model
     room = OperatingRoomUpdate(location="Updated Room")
     assert room.location == "Updated Room"
-    
+
     # Test SurgeryUpdate model
     surgery = SurgeryUpdate(
         surgery_type_id=2,

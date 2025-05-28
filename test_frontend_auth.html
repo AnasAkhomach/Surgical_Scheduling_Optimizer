@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frontend Auth Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; }
+        input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .result { margin-top: 20px; padding: 10px; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Frontend Authentication Test</h1>
+        
+        <h2>Login Test</h2>
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" value="admin" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" value="admin123" required>
+            </div>
+            <button type="submit">Login</button>
+        </form>
+        
+        <h2>Registration Test</h2>
+        <form id="registerForm">
+            <div class="form-group">
+                <label for="regUsername">Username:</label>
+                <input type="text" id="regUsername" required>
+            </div>
+            <div class="form-group">
+                <label for="regEmail">Email:</label>
+                <input type="email" id="regEmail" required>
+            </div>
+            <div class="form-group">
+                <label for="regFullName">Full Name:</label>
+                <input type="text" id="regFullName" required>
+            </div>
+            <div class="form-group">
+                <label for="regPassword">Password:</label>
+                <input type="password" id="regPassword" required>
+            </div>
+            <button type="submit">Register</button>
+        </form>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:8000/api';
+        
+        // Replicate the frontend API logic
+        async function apiRequest(endpoint, options = {}) {
+            const url = `${API_BASE_URL}${endpoint}`;
+            
+            // Check if we're sending FormData (for file uploads or OAuth2 form data)
+            const isFormData = options.body instanceof FormData;
+            
+            const defaultOptions = {
+                headers: {},
+            };
+            
+            // Only set Content-Type for JSON requests, let browser handle FormData
+            if (!isFormData) {
+                defaultOptions.headers['Content-Type'] = 'application/json';
+            }
+            
+            // Add authentication token if available
+            const token = localStorage.getItem('authToken');
+            if (token) {
+                defaultOptions.headers.Authorization = `Bearer ${token}`;
+            }
+            
+            const config = {
+                ...defaultOptions,
+                ...options,
+                headers: {
+                    ...defaultOptions.headers,
+                    ...options.headers,
+                },
+            };
+            
+            try {
+                console.log(`🔍 API Request: ${config.method || 'GET'} ${url}`);
+                console.log('📤 Request config:', {
+                    headers: config.headers,
+                    body: config.body instanceof FormData ? 'FormData' : config.body
+                });
+                
+                const response = await fetch(url, config);
+                console.log(`📥 Response: ${response.status} ${response.statusText}`);
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    console.error('❌ API Error Response:', data);
+                    throw new Error(data.detail || `HTTP error! status: ${response.status}`);
+                }
+                
+                console.log('✅ API Success:', data);
+                return data;
+            } catch (error) {
+                console.error(`💥 API request failed: ${endpoint}`, error);
+                throw error;
+            }
+        }
+        
+        async function login(username, password) {
+            const formData = new FormData();
+            formData.append('username', username);
+            formData.append('password', password);
+            formData.append('grant_type', 'password');
+            
+            return apiRequest('/auth/token', {
+                method: 'POST',
+                body: formData,
+            });
+        }
+        
+        async function register(userData) {
+            return apiRequest('/auth/register', {
+                method: 'POST',
+                body: JSON.stringify(userData),
+            });
+        }
+        
+        function showResult(message, type = 'info') {
+            const resultsDiv = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `result ${type}`;
+            resultDiv.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong>: ${message}`;
+            resultsDiv.appendChild(resultDiv);
+            resultsDiv.scrollTop = resultsDiv.scrollHeight;
+        }
+        
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                showResult('Attempting login...', 'info');
+                const response = await login(username, password);
+                showResult(`Login successful! Token: ${response.access_token.substring(0, 20)}...`, 'success');
+                localStorage.setItem('authToken', response.access_token);
+            } catch (error) {
+                showResult(`Login failed: ${error.message}`, 'error');
+            }
+        });
+        
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const userData = {
+                username: document.getElementById('regUsername').value,
+                email: document.getElementById('regEmail').value,
+                full_name: document.getElementById('regFullName').value,
+                password: document.getElementById('regPassword').value,
+            };
+            
+            try {
+                showResult('Attempting registration...', 'info');
+                const response = await register(userData);
+                showResult(`Registration successful! User: ${response.username}`, 'success');
+            } catch (error) {
+                showResult(`Registration failed: ${error.message}`, 'error');
+            }
+        });
+        
+        // Generate random username for testing
+        document.getElementById('regUsername').value = `testuser${Math.floor(Math.random() * 10000)}`;
+        document.getElementById('regEmail').value = `test${Math.floor(Math.random() * 10000)}@example.com`;
+        document.getElementById('regFullName').value = `Test User ${Math.floor(Math.random() * 10000)}`;
+        document.getElementById('regPassword').value = 'testpass123';
+    </script>
+</body>
+</html>

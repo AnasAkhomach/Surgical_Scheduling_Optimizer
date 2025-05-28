@@ -149,7 +149,7 @@ class UserBase(BaseModel):
     username: str
     email: EmailStr
     full_name: Optional[str] = None
-    role: str
+    role: Optional[str] = None  # Made optional for public registration
     staff_id: Optional[int] = None
 
 
@@ -366,6 +366,24 @@ class SDSTMatrix(BaseModel):
 
 
 # Enhanced response models for frontend consumption
+class ScheduleAssignment(BaseModel):
+    """Model for schedule assignment with enriched data."""
+    surgery_id: int
+    room_id: int
+    room: str  # e.g., "OR-1"
+    surgeon_id: Optional[int] = None
+    surgeon: Optional[str] = None  # e.g., "Dr. Smith"
+    surgery_type_id: int
+    surgery_type: str  # e.g., "Appendectomy"
+    start_time: datetime
+    end_time: datetime
+    duration_minutes: int
+    patient_id: Optional[int] = None
+    patient_name: Optional[str] = None
+    urgency_level: Optional[UrgencyLevel] = None
+    status: Optional[SurgeryStatus] = None
+
+
 class SurgeryEnriched(BaseModel):
     """Enhanced surgery model with related entity names for frontend consumption."""
     surgery_id: int
@@ -386,22 +404,70 @@ class SurgeryEnriched(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ScheduleAssignment(BaseModel):
-    """Model for schedule assignment with enriched data."""
+class ErrorResponse(BaseModel):
+    """Model for error responses."""
+    error_code: str
+    message: str
+    details: Optional[Dict[str, Any]] = None
+    timestamp: datetime = Field(default_factory=datetime.now)
+
+
+class ScheduleConflict(BaseModel):
+    """Model for schedule conflicts."""
+    conflict_type: str
     surgery_id: int
-    room_id: int
-    room: str  # e.g., "OR-1"
-    surgeon_id: Optional[int] = None
-    surgeon: Optional[str] = None  # e.g., "Dr. Smith"
-    surgery_type_id: int
-    surgery_type: str  # e.g., "Appendectomy"
-    start_time: datetime
-    end_time: datetime
-    duration_minutes: int
-    patient_id: Optional[int] = None
-    patient_name: Optional[str] = None
-    urgency_level: Optional[UrgencyLevel] = None
-    status: Optional[SurgeryStatus] = None
+    conflicting_surgery_id: Optional[int] = None
+    resource_type: str
+    resource_id: int
+    conflict_start: datetime
+    conflict_end: datetime
+    severity: str
+    message: str
+
+
+class ScheduleValidationResult(BaseModel):
+    """Model for schedule validation results."""
+    is_valid: bool
+    conflicts: List[ScheduleConflict]
+    warnings: List[str]
+    total_conflicts: int
+    critical_conflicts: int
+
+
+class ManualScheduleAdjustment(BaseModel):
+    """Model for manual schedule adjustments."""
+    surgery_id: int
+    new_room_id: Optional[int] = None
+    new_surgeon_id: Optional[int] = None
+    new_start_time: Optional[datetime] = None
+    new_duration_minutes: Optional[int] = None
+    reason: str
+    force_override: bool = False
+
+
+class ScheduleComparison(BaseModel):
+    """Model for schedule comparison."""
+    current_schedule: List[ScheduleAssignment]
+    proposed_schedule: List[ScheduleAssignment]
+    changes: List[Dict[str, Any]]
+    metrics_comparison: Dict[str, Dict[str, float]]
+    improvement_summary: str
+
+
+class ScheduleHistoryEntry(BaseModel):
+    """Model for schedule history entries."""
+    history_id: int
+    schedule_date: date
+    created_at: datetime
+    created_by_user_id: int
+    created_by_username: str
+    action_type: str
+    changes_summary: str
+    affected_surgeries: List[int]
+    schedule_snapshot: List[ScheduleAssignment]
+
+
+
 
 
 # Enhanced Optimization Models for Task 2.1
@@ -501,7 +567,62 @@ class OptimizationComparison(BaseModel):
     improvement_summary: str
 
 
+class OptimizationResultEnriched(BaseModel):
+    """Enhanced optimization result with additional analysis."""
+    optimization_id: str
+    assignments: List[ScheduleAssignment]
+    score: float
+    detailed_metrics: Dict[str, float]
+    iteration_count: int
+    execution_time_seconds: float
+    algorithm_used: OptimizationAlgorithm
+    parameters_used: AdvancedOptimizationParameters
+    convergence_data: List[Dict[str, Any]] = Field(default_factory=list)
+    solution_quality_analysis: Dict[str, Any] = Field(default_factory=dict)
+    cached: bool = Field(default=False)
+    resource_utilization: Dict[str, float] = Field(default_factory=dict)
+    constraint_violations: List[str] = Field(default_factory=list)
+
+
+class OptimizationAnalysis(BaseModel):
+    """Model for detailed optimization analysis."""
+    optimization_id: str
+    solution_quality_score: float
+    constraint_violations: List[str]
+    resource_utilization: Dict[str, float]
+    bottleneck_analysis: Dict[str, Any]
+    improvement_suggestions: List[str]
+    sensitivity_analysis: Dict[str, float]
+
+
 # Emergency Surgery Models for Task 2.2
+class EmergencyType(str, Enum):
+    """Enum for emergency types."""
+    TRAUMA = "trauma"
+    CARDIAC = "cardiac"
+    NEUROLOGICAL = "neurological"
+    OBSTETRIC = "obstetric"
+    GENERAL = "general"
+    PEDIATRIC = "pediatric"
+
+
+class EmergencyPriority(str, Enum):
+    """Enum for emergency priority levels."""
+    IMMEDIATE = "immediate"  # Life-threatening, requires immediate attention
+    URGENT = "urgent"        # Serious condition, requires prompt attention
+    SEMI_URGENT = "semi_urgent"  # Stable but needs timely intervention
+    NON_URGENT = "non_urgent"    # Can wait for scheduled time
+
+
+class ConflictResolutionStrategy(str, Enum):
+    """Enum for conflict resolution strategies."""
+    BUMP_LOWER_PRIORITY = "bump_lower_priority"
+    USE_BACKUP_ROOM = "use_backup_room"
+    EXTEND_HOURS = "extend_hours"
+    RESCHEDULE_ELECTIVE = "reschedule_elective"
+    MANUAL_REVIEW = "manual_review"
+
+
 class EmergencySurgeryRequest(BaseModel):
     """Model for emergency surgery insertion request."""
     patient_id: int = Field(..., description="Patient requiring emergency surgery")
@@ -1018,95 +1139,6 @@ class WebSocketBroadcastRequest(BaseModel):
     sender_user_id: Optional[int] = Field(None, description="User ID of sender")
 
 
-class OptimizationMetrics(BaseModel):
-    """Model for optimization metrics."""
-    or_utilization: float
-    setup_times: float
-    surgeon_preferences: float
-    workload_balance: float
-    patient_wait_time: float
-    emergency_priority: float
-    operational_costs: float
-    staff_overtime: float
-
-
-class OptimizationResultEnriched(BaseModel):
-    """Enhanced optimization result model for frontend consumption."""
-    assignments: List[ScheduleAssignment]
-    score: float
-    metrics: OptimizationMetrics
-    iteration_count: int
-    execution_time_seconds: float
-    total_surgeries: int
-    rooms_utilized: int
-    average_utilization: float
-
-
-class ErrorResponse(BaseModel):
-    """Standardized error response model."""
-    detail: str
-    error_code: Optional[str] = None
-    field_errors: Optional[Dict[str, List[str]]] = None
-
-
-# Enhanced Schedule Management Models
-class ScheduleConflict(BaseModel):
-    """Model for schedule conflict information."""
-    conflict_type: str = Field(..., description="Type of conflict (time_overlap, resource_conflict, etc.)")
-    surgery_id: int = Field(..., description="ID of the conflicting surgery")
-    conflicting_surgery_id: Optional[int] = Field(None, description="ID of the surgery it conflicts with")
-    resource_type: Optional[str] = Field(None, description="Type of resource in conflict (room, surgeon, equipment)")
-    resource_id: Optional[int] = Field(None, description="ID of the conflicting resource")
-    conflict_start: datetime = Field(..., description="Start time of the conflict")
-    conflict_end: datetime = Field(..., description="End time of the conflict")
-    severity: str = Field(..., description="Conflict severity (critical, warning, info)")
-    message: str = Field(..., description="Human-readable conflict description")
-
-
-class ScheduleValidationResult(BaseModel):
-    """Model for schedule validation results."""
-    is_valid: bool = Field(..., description="Whether the schedule is valid")
-    conflicts: List[ScheduleConflict] = Field(default_factory=list, description="List of conflicts found")
-    warnings: List[str] = Field(default_factory=list, description="List of warnings")
-    total_conflicts: int = Field(..., description="Total number of conflicts")
-    critical_conflicts: int = Field(..., description="Number of critical conflicts")
-
-
-class ManualScheduleAdjustment(BaseModel):
-    """Model for manual schedule adjustments."""
-    surgery_id: int = Field(..., description="ID of the surgery to adjust")
-    new_room_id: Optional[int] = Field(None, description="New room assignment")
-    new_surgeon_id: Optional[int] = Field(None, description="New surgeon assignment")
-    new_start_time: Optional[datetime] = Field(None, description="New start time")
-    new_duration_minutes: Optional[int] = Field(None, gt=0, le=1440, description="New duration in minutes")
-    reason: str = Field(..., min_length=1, max_length=500, description="Reason for the adjustment")
-    force_override: bool = Field(False, description="Force adjustment even if conflicts exist")
-
-
-class ScheduleComparison(BaseModel):
-    """Model for comparing two schedules."""
-    current_schedule: List[ScheduleAssignment]
-    proposed_schedule: List[ScheduleAssignment]
-    changes: List[Dict[str, Any]] = Field(default_factory=list, description="List of changes between schedules")
-    metrics_comparison: Dict[str, Dict[str, float]] = Field(default_factory=dict, description="Metrics comparison")
-    improvement_summary: str = Field(..., description="Summary of improvements or changes")
-
-
-class ScheduleHistoryEntry(BaseModel):
-    """Model for schedule history tracking."""
-    history_id: int
-    schedule_date: date
-    created_at: datetime
-    created_by_user_id: int
-    created_by_username: str
-    action_type: str = Field(..., description="Type of action (manual_adjustment, optimization, bulk_update)")
-    changes_summary: str = Field(..., description="Summary of changes made")
-    affected_surgeries: List[int] = Field(default_factory=list, description="List of affected surgery IDs")
-    schedule_snapshot: List[ScheduleAssignment] = Field(default_factory=list, description="Snapshot of the schedule")
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 # Additional Enhanced Optimization Models
 class OptimizationCache(BaseModel):
     """Model for optimization result caching."""
@@ -1139,17 +1171,6 @@ class OptimizationSession(BaseModel):
     progress: Optional[OptimizationProgress] = None
     result: Optional[OptimizationResult] = None
     error_message: Optional[str] = None
-
-
-class OptimizationAnalysis(BaseModel):
-    """Model for detailed optimization analysis."""
-    optimization_id: str
-    solution_quality_score: float
-    constraint_violations: List[Dict[str, Any]] = Field(default_factory=list)
-    resource_utilization: Dict[str, float] = Field(default_factory=dict)
-    bottleneck_analysis: Dict[str, Any] = Field(default_factory=dict)
-    improvement_suggestions: List[str] = Field(default_factory=list)
-    sensitivity_analysis: Dict[str, float] = Field(default_factory=dict)
 
 
 class OptimizationBenchmark(BaseModel):

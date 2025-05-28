@@ -1,52 +1,146 @@
 <template>
   <div class="dashboard-container">
-    <h1>Welcome, {{ authStore.user?.username || 'User' }}!</h1>
+    <!-- Enhanced Header Section -->
+    <div class="dashboard-header">
+      <div class="welcome-section">
+        <h1>Welcome back, {{ authStore.user?.username || 'User' }}!</h1>
+        <p class="welcome-subtitle">{{ getCurrentDateString() }} • {{ getCurrentTimeString() }}</p>
+      </div>
+      <div class="header-stats">
+        <div class="header-stat-item">
+          <div class="stat-icon">🏥</div>
+          <div class="stat-info">
+            <div class="stat-value">{{ totalORsActive }}</div>
+            <div class="stat-label">Active ORs</div>
+          </div>
+        </div>
+        <div class="header-stat-item">
+          <div class="stat-icon">⏱️</div>
+          <div class="stat-info">
+            <div class="stat-value">{{ upcomingSurgeries }}</div>
+            <div class="stat-label">Upcoming Today</div>
+          </div>
+        </div>
+        <div class="header-stat-item urgent" v-if="urgentAlerts > 0">
+          <div class="stat-icon">🚨</div>
+          <div class="stat-info">
+            <div class="stat-value">{{ urgentAlerts }}</div>
+            <div class="stat-label">Urgent Alerts</div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div v-if="scheduleStore.isLoading" class="loading-message">
-      Loading dashboard data...
+      <div class="loading-spinner"></div>
+      <p>Loading dashboard data...</p>
     </div>
 
     <div v-else class="dashboard-widgets">
-      <!-- Quick Actions Widget -->
+      <!-- Enhanced Quick Actions Widget -->
       <div class="widget quick-actions-widget">
-        <h2>Quick Actions</h2>
-        <div class="quick-action-buttons">
-          <button @click="scheduleNewSurgery">Schedule New Elective Surgery</button>
-          <button class="btn btn-secondary" @click="addEmergencyCase">Add Emergency Case</button>
-          <button @click="goToMasterSchedule">Go to Master Schedule</button>
-          <button @click="manageResources">Manage Resources</button>
-          <button class="btn btn-secondary" @click="runOptimization">Run Optimization</button>
+        <div class="widget-header">
+          <h2>Quick Actions</h2>
+          <span class="widget-subtitle">Common tasks and shortcuts</span>
+        </div>
+        <div class="quick-action-grid">
+          <button @click="scheduleNewSurgery" class="action-card primary">
+            <div class="action-icon">📅</div>
+            <div class="action-content">
+              <div class="action-title">Schedule Surgery</div>
+              <div class="action-description">Add new elective surgery</div>
+            </div>
+          </button>
+          <button @click="addEmergencyCase" class="action-card emergency">
+            <div class="action-icon">🚨</div>
+            <div class="action-content">
+              <div class="action-title">Emergency Case</div>
+              <div class="action-description">Add urgent surgery</div>
+            </div>
+          </button>
+          <button @click="goToMasterSchedule" class="action-card featured">
+            <div class="action-icon">📊</div>
+            <div class="action-content">
+              <div class="action-title">Master Schedule</div>
+              <div class="action-description">View Gantt chart</div>
+            </div>
+          </button>
+          <button @click="manageResources" class="action-card secondary">
+            <div class="action-icon">🛠️</div>
+            <div class="action-content">
+              <div class="action-title">Manage Resources</div>
+              <div class="action-description">ORs, staff, equipment</div>
+            </div>
+          </button>
+          <button @click="runOptimization" class="action-card optimization">
+            <div class="action-icon">🚀</div>
+            <div class="action-content">
+              <div class="action-title">Run Optimization</div>
+              <div class="action-description">Optimize schedule</div>
+            </div>
+          </button>
+          <button @click="viewReports" class="action-card secondary">
+            <div class="action-icon">📈</div>
+            <div class="action-content">
+              <div class="action-title">View Reports</div>
+              <div class="action-description">Analytics & insights</div>
+            </div>
+          </button>
         </div>
       </div>
 
-      <!-- Key Performance Indicators (KPIs) Widget -->
+      <!-- Enhanced KPIs Widget -->
       <div class="widget kpis-widget">
-        <h2>Key Performance Indicators</h2>
-        <div class="kpi-list">
-          <!-- KPIs will likely come from the scheduleStore or a dedicated reporting store later -->
-          <div class="kpi-item" @click="navigateToReport('OR Utilization')">
-            <span class="kpi-label">OR Utilization (Today):</span>
-            <!-- Using simulated data for now -->
-            <span class="kpi-value">{{ orUtilizationToday }}%</span>
+        <div class="widget-header">
+          <h2>Performance Dashboard</h2>
+          <span class="widget-subtitle">Real-time metrics and insights</span>
+        </div>
+        <div class="kpi-grid">
+          <div class="kpi-card" :class="getKPIClass('utilization', orUtilizationToday)">
+            <div class="kpi-icon">🏥</div>
+            <div class="kpi-content">
+              <div class="kpi-value">{{ orUtilizationToday }}%</div>
+              <div class="kpi-label">OR Utilization</div>
+              <div class="kpi-trend" :class="getTrendClass('utilization')">
+                <span class="trend-icon">{{ getTrendIcon('utilization') }}</span>
+                <span class="trend-text">{{ getTrendText('utilization') }}</span>
+              </div>
+            </div>
           </div>
-          <div class="kpi-item" @click="navigateToReport('Avg. SDST')">
-            <span class="kpi-label">Avg. SDST (Today):</span>
-             <!-- Using simulated data for now -->
-            <span class="kpi-value">{{ avgSdstToday }} min</span>
+          <div class="kpi-card" :class="getKPIClass('sdst', avgSdstToday)">
+            <div class="kpi-icon">⏱️</div>
+            <div class="kpi-content">
+              <div class="kpi-value">{{ avgSdstToday }}m</div>
+              <div class="kpi-label">Average SDST</div>
+              <div class="kpi-trend" :class="getTrendClass('sdst')">
+                <span class="trend-icon">{{ getTrendIcon('sdst') }}</span>
+                <span class="trend-text">{{ getTrendText('sdst') }}</span>
+              </div>
+            </div>
           </div>
-          <div class="kpi-item" @click="navigateToReport('Emergency Cases')">
-            <span class="kpi-label">Emergency Cases (Today):</span>
-             <!-- Using simulated data for now -->
-            <span class="kpi-value">{{ emergencyCasesToday }}</span>
+          <div class="kpi-card" :class="getKPIClass('emergency', emergencyCasesToday)">
+            <div class="kpi-icon">🚨</div>
+            <div class="kpi-content">
+              <div class="kpi-value">{{ emergencyCasesToday }}</div>
+              <div class="kpi-label">Emergency Cases</div>
+              <div class="kpi-trend" :class="getTrendClass('emergency')">
+                <span class="trend-icon">{{ getTrendIcon('emergency') }}</span>
+                <span class="trend-text">{{ getTrendText('emergency') }}</span>
+              </div>
+            </div>
           </div>
-          <div class="kpi-item" @click="navigateToReport('Cancelled Surgeries')">
-            <span class="kpi-label">Cancelled Surgeries (Today):</span>
-             <!-- Using simulated data for now -->
-            <span class="kpi-value">{{ cancelledSurgeriesToday }}</span>
+          <div class="kpi-card" :class="getKPIClass('cancelled', cancelledSurgeriesToday)">
+            <div class="kpi-icon">❌</div>
+            <div class="kpi-content">
+              <div class="kpi-value">{{ cancelledSurgeriesToday }}</div>
+              <div class="kpi-label">Cancelled Today</div>
+              <div class="kpi-trend" :class="getTrendClass('cancelled')">
+                <span class="trend-icon">{{ getTrendIcon('cancelled') }}</span>
+                <span class="trend-text">{{ getTrendText('cancelled') }}</span>
+              </div>
+            </div>
           </div>
         </div>
-        <!-- Placeholder for charts/visualizations -->
-        <p><em>(Placeholder for KPI charts/visualizations)</em></p>
       </div>
 
       <!-- Today's OR Schedule Overview Widget -->
@@ -198,8 +292,8 @@ const addEmergencyCase = () => {
 };
 
 const goToMasterSchedule = () => {
-  console.log('Navigate to Master Schedule');
-  router.push({ name: 'Scheduling' });
+  console.log('Navigate to Master Schedule (Gantt Chart)');
+  router.push({ name: 'MasterSchedule' });
 };
 
 const manageResources = () => {
@@ -214,7 +308,121 @@ const runOptimization = () => {
   // If it navigates, assuming a route named 'OptimizationControl'
   // router.push({ name: 'OptimizationControl' });
 };
+
+const viewReports = () => {
+  console.log('Navigate to Reports and Analytics');
+  // router.push({ name: 'ReportsAnalytics' });
+};
 // -------------------------------------
+
+// --- Enhanced Dashboard Methods ---
+const getCurrentDateString = () => {
+  return new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+};
+
+const getCurrentTimeString = () => {
+  return new Date().toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+// Computed properties for header stats
+const totalORsActive = computed(() => {
+  // Count ORs that have surgeries scheduled today
+  const today = new Date().toDateString();
+  const activeORs = new Set();
+
+  visibleScheduledSurgeries.value.forEach(surgery => {
+    const surgeryDate = new Date(surgery.startTime).toDateString();
+    if (surgeryDate === today) {
+      activeORs.add(surgery.orName);
+    }
+  });
+
+  return activeORs.size;
+});
+
+const upcomingSurgeries = computed(() => {
+  const now = new Date();
+  const endOfDay = new Date(now);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  return visibleScheduledSurgeries.value.filter(surgery => {
+    const surgeryTime = new Date(surgery.startTime);
+    return surgeryTime > now && surgeryTime <= endOfDay;
+  }).length;
+});
+
+const urgentAlerts = computed(() => {
+  return criticalAlerts.value.length + sdstConflictsFromStore.value.length;
+});
+
+// KPI Enhancement Methods
+const getKPIClass = (type, value) => {
+  switch (type) {
+    case 'utilization':
+      if (value >= 85) return 'excellent';
+      if (value >= 70) return 'good';
+      if (value >= 50) return 'warning';
+      return 'poor';
+    case 'sdst':
+      if (value <= 20) return 'excellent';
+      if (value <= 30) return 'good';
+      if (value <= 45) return 'warning';
+      return 'poor';
+    case 'emergency':
+      if (value <= 1) return 'excellent';
+      if (value <= 3) return 'good';
+      if (value <= 5) return 'warning';
+      return 'poor';
+    case 'cancelled':
+      if (value === 0) return 'excellent';
+      if (value <= 2) return 'good';
+      if (value <= 4) return 'warning';
+      return 'poor';
+    default:
+      return 'good';
+  }
+};
+
+const getTrendClass = (type) => {
+  // Simulated trend data - in real app, this would come from historical data
+  const trends = {
+    utilization: 'up',
+    sdst: 'down',
+    emergency: 'stable',
+    cancelled: 'down'
+  };
+  return trends[type] || 'stable';
+};
+
+const getTrendIcon = (type) => {
+  const trendClass = getTrendClass(type);
+  switch (trendClass) {
+    case 'up': return '↗️';
+    case 'down': return '↘️';
+    case 'stable': return '→';
+    default: return '→';
+  }
+};
+
+const getTrendText = (type) => {
+  const trendClass = getTrendClass(type);
+  const improvements = {
+    utilization: { up: '+5% vs yesterday', down: '-3% vs yesterday', stable: 'No change' },
+    sdst: { up: '+2min vs avg', down: '-5min vs avg', stable: 'Within range' },
+    emergency: { up: '+1 vs yesterday', down: '-1 vs yesterday', stable: 'Normal level' },
+    cancelled: { up: '+1 vs yesterday', down: '-2 vs yesterday', stable: 'No change' }
+  };
+
+  return improvements[type]?.[trendClass] || 'No data';
+};
 
 // --- KPI Click Handler ---
 const navigateToReport = (kpiName) => {
@@ -296,7 +504,115 @@ onMounted(() => {
 */
 
 .dashboard-container {
-  padding: var(--spacing-md); /* Use global spacing variable */
+  padding: var(--spacing-lg);
+  background-color: var(--color-background);
+  min-height: 100vh;
+}
+
+/* Enhanced Dashboard Header */
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--spacing-xl);
+  padding: var(--spacing-xl);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  color: white;
+  border-radius: var(--border-radius-lg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.welcome-section h1 {
+  margin: 0 0 var(--spacing-xs) 0;
+  font-size: var(--font-size-xxl);
+  font-weight: var(--font-weight-bold);
+}
+
+.welcome-subtitle {
+  margin: 0;
+  font-size: var(--font-size-base);
+  opacity: 0.9;
+  font-weight: var(--font-weight-normal);
+}
+
+.header-stats {
+  display: flex;
+  gap: var(--spacing-lg);
+  flex-wrap: wrap;
+}
+
+.header-stat-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  background: rgba(255, 255, 255, 0.1);
+  padding: var(--spacing-md);
+  border-radius: var(--border-radius-md);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.header-stat-item:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.header-stat-item.urgent {
+  background: rgba(220, 53, 69, 0.2);
+  border-color: rgba(220, 53, 69, 0.3);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.stat-icon {
+  font-size: var(--font-size-xl);
+}
+
+.stat-info {
+  text-align: center;
+}
+
+.stat-value {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  margin-bottom: var(--spacing-xs);
+}
+
+.stat-label {
+  font-size: var(--font-size-sm);
+  opacity: 0.9;
+  font-weight: var(--font-weight-medium);
+}
+
+.loading-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl);
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--color-border);
+  border-top: 4px solid var(--color-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: var(--spacing-md);
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 .dashboard-widgets {
@@ -324,57 +640,230 @@ onMounted(() => {
   color: var(--color-very-dark-gray); /* Use global text color variable */
 }
 
-/* Quick Actions Widget Specific Styles */
-.quick-actions-widget .quick-action-buttons,
-.conflict-details-widget .conflict-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-sm); /* Use global spacing variable */
+/* Enhanced Widget Headers */
+.widget-header {
+  margin-bottom: var(--spacing-lg);
 }
 
-.quick-actions-widget button,
-.conflict-details-widget button {
-  /* Inherits base button styles from global style.css */
-  /* You can add minor overrides here if needed */
+.widget-header h2 {
+  margin-bottom: var(--spacing-xs);
+  border-bottom: none;
+  padding-bottom: 0;
 }
 
-.quick-actions-widget .btn-secondary,
-.conflict-details-widget .btn-secondary {
-    /* Inherits .btn-secondary styles from global style.css */
+.widget-subtitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-normal);
 }
 
-
-/* KPI Widget Specific Styles */
-.kpi-list {
+/* Enhanced Quick Actions Widget */
+.quick-action-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr; /* Two columns for KPI items */
-  gap: var(--spacing-sm); /* Use global spacing variable */
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--spacing-md);
 }
 
-.kpi-item {
+.action-card {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+  border: none;
+  border-radius: var(--border-radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
   text-align: left;
   cursor: pointer;
-  transition: background-color 0.2s ease;
-  padding: var(--spacing-sm); /* Use global spacing variable */
-  border-radius: var(--border-radius-sm); /* Use global border radius variable */
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  border-left: 4px solid transparent;
 }
 
-.kpi-item:hover {
-  background-color: var(--color-background-soft); /* Use global background variable */
+.action-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-.kpi-item .kpi-label {
-  display: block;
-  font-size: var(--font-size-sm); /* Use global font size variable */
-  color: var(--color-dark-gray); /* Use global text color variable */
-  margin-bottom: var(--spacing-xs); /* Use global spacing variable */
+.action-card.primary {
+  border-left-color: var(--color-primary);
 }
 
-.kpi-item .kpi-value {
-  font-size: var(--font-size-xl); /* Use global font size variable */
-  font-weight: var(--font-weight-bold); /* Use global font weight variable */
-  color: var(--color-primary); /* Use global primary color variable */
-  line-height: 1.2;
+.action-card.primary:hover {
+  background: var(--color-primary-light);
+  color: white;
+}
+
+.action-card.emergency {
+  border-left-color: var(--color-danger);
+}
+
+.action-card.emergency:hover {
+  background: var(--color-danger);
+  color: white;
+}
+
+.action-card.featured {
+  border-left-color: var(--color-success);
+  background: linear-gradient(135deg, var(--color-success) 0%, var(--color-success-dark) 100%);
+  color: white;
+}
+
+.action-card.featured:hover {
+  background: linear-gradient(135deg, var(--color-success-dark) 0%, var(--color-success) 100%);
+}
+
+.action-card.secondary {
+  border-left-color: var(--color-secondary);
+}
+
+.action-card.secondary:hover {
+  background: var(--color-secondary);
+  color: white;
+}
+
+.action-card.optimization {
+  border-left-color: var(--color-warning);
+}
+
+.action-card.optimization:hover {
+  background: var(--color-warning);
+  color: white;
+}
+
+.action-icon {
+  font-size: var(--font-size-xl);
+  flex-shrink: 0;
+}
+
+.action-content {
+  flex: 1;
+}
+
+.action-title {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--spacing-xs);
+}
+
+.action-description {
+  font-size: var(--font-size-sm);
+  opacity: 0.8;
+}
+
+
+/* Enhanced KPI Widget Styles */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.kpi-card {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+  background: var(--color-surface);
+  border-radius: var(--border-radius-md);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+  border-left: 4px solid var(--color-border);
+  cursor: pointer;
+}
+
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.kpi-card.excellent {
+  border-left-color: var(--color-success);
+  background: linear-gradient(135deg, rgba(40, 167, 69, 0.05) 0%, rgba(40, 167, 69, 0.02) 100%);
+}
+
+.kpi-card.good {
+  border-left-color: var(--color-primary);
+  background: linear-gradient(135deg, rgba(0, 117, 194, 0.05) 0%, rgba(0, 117, 194, 0.02) 100%);
+}
+
+.kpi-card.warning {
+  border-left-color: var(--color-warning);
+  background: linear-gradient(135deg, rgba(255, 193, 7, 0.05) 0%, rgba(255, 193, 7, 0.02) 100%);
+}
+
+.kpi-card.poor {
+  border-left-color: var(--color-danger);
+  background: linear-gradient(135deg, rgba(220, 53, 69, 0.05) 0%, rgba(220, 53, 69, 0.02) 100%);
+}
+
+.kpi-icon {
+  font-size: var(--font-size-xxl);
+  flex-shrink: 0;
+}
+
+.kpi-content {
+  flex: 1;
+}
+
+.kpi-value {
+  font-size: var(--font-size-xxl);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  margin-bottom: var(--spacing-xs);
+}
+
+.kpi-card.excellent .kpi-value {
+  color: var(--color-success);
+}
+
+.kpi-card.good .kpi-value {
+  color: var(--color-primary);
+}
+
+.kpi-card.warning .kpi-value {
+  color: var(--color-warning);
+}
+
+.kpi-card.poor .kpi-value {
+  color: var(--color-danger);
+}
+
+.kpi-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: var(--spacing-xs);
+}
+
+.kpi-trend {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+}
+
+.kpi-trend.up {
+  color: var(--color-success);
+}
+
+.kpi-trend.down {
+  color: var(--color-danger);
+}
+
+.kpi-trend.stable {
+  color: var(--color-text-secondary);
+}
+
+.trend-icon {
+  font-size: var(--font-size-sm);
+}
+
+.trend-text {
+  opacity: 0.8;
 }
 
 /* Specific widget adjustments */
@@ -460,5 +949,135 @@ onMounted(() => {
     margin-top: var(--spacing-md); /* Space above action buttons */
     padding-top: var(--spacing-md); /* Space above action buttons */
      border-top: 1px solid var(--color-border-soft);
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  .dashboard-container {
+    padding: var(--spacing-md);
+  }
+
+  .dashboard-header {
+    flex-direction: column;
+    gap: var(--spacing-lg);
+    text-align: center;
+    padding: var(--spacing-lg);
+  }
+
+  .welcome-section h1 {
+    font-size: var(--font-size-xl);
+  }
+
+  .header-stats {
+    justify-content: center;
+    gap: var(--spacing-md);
+  }
+
+  .header-stat-item {
+    flex-direction: column;
+    text-align: center;
+    padding: var(--spacing-sm);
+    min-width: 80px;
+  }
+
+  .stat-icon {
+    font-size: var(--font-size-lg);
+  }
+
+  .stat-value {
+    font-size: var(--font-size-base);
+  }
+
+  .stat-label {
+    font-size: var(--font-size-xs);
+  }
+
+  .dashboard-widgets {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-md);
+  }
+
+  .quick-action-grid {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-sm);
+  }
+
+  .action-card {
+    padding: var(--spacing-md);
+  }
+
+  .action-icon {
+    font-size: var(--font-size-lg);
+  }
+
+  .action-title {
+    font-size: var(--font-size-sm);
+  }
+
+  .action-description {
+    font-size: var(--font-size-xs);
+  }
+
+  .kpi-grid {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-sm);
+  }
+
+  .kpi-card {
+    padding: var(--spacing-md);
+  }
+
+  .kpi-icon {
+    font-size: var(--font-size-xl);
+  }
+
+  .kpi-value {
+    font-size: var(--font-size-xl);
+  }
+
+  .kpi-label {
+    font-size: var(--font-size-xs);
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-header {
+    padding: var(--spacing-md);
+  }
+
+  .welcome-section h1 {
+    font-size: var(--font-size-lg);
+  }
+
+  .welcome-subtitle {
+    font-size: var(--font-size-sm);
+  }
+
+  .header-stats {
+    gap: var(--spacing-sm);
+  }
+
+  .header-stat-item {
+    padding: var(--spacing-xs);
+    min-width: 60px;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .kpi-card {
+    flex-direction: column;
+    text-align: center;
+    padding: var(--spacing-sm);
+  }
+
+  .kpi-icon {
+    font-size: var(--font-size-lg);
+  }
+
+  .kpi-value {
+    font-size: var(--font-size-lg);
+  }
 }
 </style>

@@ -1,8 +1,9 @@
 // src/services/api.js
 // API service for communicating with FastAPI backend
+import { getCacheBustingHeaders, addCacheBuster } from '../utils/cacheManager.js';
 
 // Base API configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 /**
  * Generic API request function
@@ -12,17 +13,31 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
  */
 async function apiRequest(endpoint, options = {}) {
   const url = `${API_BASE_URL}${endpoint}`;
-  
+
+  // Check if we're sending FormData (for file uploads or OAuth2 form data)
+  const isFormData = options.body instanceof FormData;
+
   const defaultOptions = {
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: {},
   };
+
+  // Only set Content-Type for JSON requests, let browser handle FormData
+  if (!isFormData) {
+    defaultOptions.headers['Content-Type'] = 'application/json';
+  }
+
+  // Add cache-busting headers for API requests
+  const cacheBustingHeaders = getCacheBustingHeaders();
+  Object.assign(defaultOptions.headers, cacheBustingHeaders);
 
   // Add authentication token if available
   const token = localStorage.getItem('authToken');
+  console.log('🔑 Token from localStorage:', token ? `${token.substring(0, 20)}...` : 'null');
   if (token) {
     defaultOptions.headers.Authorization = `Bearer ${token}`;
+    console.log('✅ Authorization header added');
+  } else {
+    console.log('❌ No token found in localStorage');
   }
 
   const config = {
@@ -35,22 +50,39 @@ async function apiRequest(endpoint, options = {}) {
   };
 
   try {
+    console.log(`🔍 API Request: ${config.method || 'GET'} ${url}`);
+    console.log('📤 Request config:', {
+      headers: config.headers,
+      body: config.body instanceof FormData ? 'FormData' : config.body
+    });
+
     const response = await fetch(url, config);
-    
+
+    console.log(`📥 Response: ${response.status} ${response.statusText}`);
+
     // Handle non-JSON responses (like 204 No Content)
     if (response.status === 204) {
+      console.log('✅ 204 No Content response');
       return null;
     }
 
     const data = await response.json();
 
     if (!response.ok) {
+      console.error('❌ API Error Response:', data);
+
+      // Log detailed field errors for debugging
+      if (data.field_errors) {
+        console.error('🔍 Field Validation Errors:', data.field_errors);
+      }
+
       throw new Error(data.detail || `HTTP error! status: ${response.status}`);
     }
 
+    console.log('✅ API Success:', data);
     return data;
   } catch (error) {
-    console.error(`API request failed: ${endpoint}`, error);
+    console.error(`💥 API request failed: ${endpoint}`, error);
     throw error;
   }
 }
@@ -61,10 +93,11 @@ export const authAPI = {
     const formData = new FormData();
     formData.append('username', username);
     formData.append('password', password);
-    
+    formData.append('grant_type', 'password'); // Required by OAuth2PasswordRequestForm
+
     return apiRequest('/auth/token', {
       method: 'POST',
-      headers: {}, // Remove Content-Type to let browser set it for FormData
+      // Don't set headers - let apiRequest detect FormData and handle Content-Type automatically
       body: formData,
     });
   },

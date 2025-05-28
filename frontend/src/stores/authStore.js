@@ -24,17 +24,34 @@ export const useAuthStore = defineStore('auth', {
         // Call real API
         const response = await authAPI.login(username, password);
 
-        // Store authentication data
+        // Store authentication data immediately
         this.token = response.access_token;
         this.isAuthenticated = true;
 
-        // Get user info
+        // Store token in localStorage immediately so it's available for subsequent API calls
+        console.log('🔑 Storing token in localStorage:', this.token.substring(0, 20) + '...');
+        localStorage.setItem('authToken', this.token);
+        localStorage.setItem('isAuthenticated', 'true');
+        console.log('✅ Token stored in localStorage');
+
+        // Verify token was stored correctly
+        const storedToken = localStorage.getItem('authToken');
+        if (storedToken !== this.token) {
+          console.error('❌ Token storage verification failed!');
+          throw new Error('Failed to store authentication token');
+        }
+        console.log('✅ Token storage verified');
+
+        // Add a small delay to ensure localStorage is fully committed
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        // Get user info (now that token is in localStorage)
+        console.log('🔍 About to call getCurrentUser, checking localStorage...');
+        console.log('🔑 localStorage authToken:', localStorage.getItem('authToken') ? localStorage.getItem('authToken').substring(0, 20) + '...' : 'null');
         const userInfo = await authAPI.getCurrentUser();
         this.user = userInfo;
 
-        // Store in localStorage
-        localStorage.setItem('authToken', this.token);
-        localStorage.setItem('isAuthenticated', 'true');
+        // Store user info in localStorage
         localStorage.setItem('user', JSON.stringify(this.user));
 
         // Navigate to dashboard
@@ -53,7 +70,7 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
-    async register(username, password) {
+    async register(username, password, email, fullName) {
       this.isLoading = true;
       this.error = null;
       let success = false;
@@ -63,7 +80,8 @@ export const useAuthStore = defineStore('auth', {
         await authAPI.register({
           username,
           password,
-          email: username, // Assuming username is email
+          email,
+          full_name: fullName
         });
 
         console.log('Registration successful for:', username, '. Please log in.');

@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Auth Flow</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; }
+        input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px; }
+        button:hover { background: #0056b3; }
+        .result { margin-top: 20px; padding: 10px; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .debug { background: #f8f9fa; color: #495057; border: 1px solid #dee2e6; font-family: monospace; }
+        pre { white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Debug Authentication Flow</h1>
+        
+        <div class="form-group">
+            <button onclick="checkLocalStorage()">Check localStorage</button>
+            <button onclick="clearLocalStorage()">Clear localStorage</button>
+            <button onclick="testSequence()">Test Full Auth Sequence</button>
+        </div>
+        
+        <h2>Manual Login Test</h2>
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" value="admin2" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" value="admin2admin2" required>
+            </div>
+            <button type="submit">Login</button>
+        </form>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:8000/api';
+        
+        function showResult(message, type = 'info') {
+            const resultsDiv = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `result ${type}`;
+            resultDiv.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong>: ${message}`;
+            resultsDiv.appendChild(resultDiv);
+            resultsDiv.scrollTop = resultsDiv.scrollHeight;
+        }
+        
+        function checkLocalStorage() {
+            const token = localStorage.getItem('authToken');
+            const isAuth = localStorage.getItem('isAuthenticated');
+            const user = localStorage.getItem('user');
+            
+            showResult(`
+                <strong>localStorage Contents:</strong><br>
+                authToken: ${token ? token.substring(0, 30) + '...' : 'null'}<br>
+                isAuthenticated: ${isAuth}<br>
+                user: ${user ? JSON.stringify(JSON.parse(user), null, 2) : 'null'}
+            `, 'debug');
+        }
+        
+        function clearLocalStorage() {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('isAuthenticated');
+            localStorage.removeItem('user');
+            showResult('localStorage cleared', 'info');
+        }
+        
+        async function testSequence() {
+            showResult('Starting authentication sequence test...', 'info');
+            
+            // Step 1: Clear localStorage
+            clearLocalStorage();
+            
+            // Step 2: Login
+            try {
+                showResult('Step 1: Attempting login...', 'info');
+                const loginData = new FormData();
+                loginData.append('username', 'admin2');
+                loginData.append('password', 'admin2admin2');
+                loginData.append('grant_type', 'password');
+                
+                const loginResponse = await fetch(`${API_BASE_URL}/auth/token`, {
+                    method: 'POST',
+                    body: loginData
+                });
+                
+                if (loginResponse.ok) {
+                    const tokenData = await loginResponse.json();
+                    showResult(`Login successful! Token: ${tokenData.access_token.substring(0, 30)}...`, 'success');
+                    
+                    // Step 3: Store token manually
+                    localStorage.setItem('authToken', tokenData.access_token);
+                    showResult('Token stored in localStorage', 'info');
+                    
+                    // Step 4: Test /auth/me immediately
+                    showResult('Step 2: Testing /auth/me with stored token...', 'info');
+                    
+                    const meResponse = await fetch(`${API_BASE_URL}/auth/me`, {
+                        headers: {
+                            'Authorization': `Bearer ${tokenData.access_token}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    if (meResponse.ok) {
+                        const userData = await meResponse.json();
+                        showResult(`/auth/me successful! User: ${userData.username} (ID: ${userData.user_id})`, 'success');
+                    } else {
+                        const errorData = await meResponse.json();
+                        showResult(`/auth/me failed: ${errorData.detail}`, 'error');
+                    }
+                    
+                } else {
+                    const errorData = await loginResponse.json();
+                    showResult(`Login failed: ${errorData.detail}`, 'error');
+                }
+                
+            } catch (error) {
+                showResult(`Test sequence error: ${error.message}`, 'error');
+            }
+        }
+        
+        // Replicate the exact frontend API logic with debugging
+        async function apiRequest(endpoint, options = {}) {
+            const url = `${API_BASE_URL}${endpoint}`;
+            
+            // Check if we're sending FormData
+            const isFormData = options.body instanceof FormData;
+            
+            const defaultOptions = {
+                headers: {},
+            };
+            
+            // Only set Content-Type for JSON requests
+            if (!isFormData) {
+                defaultOptions.headers['Content-Type'] = 'application/json';
+            }
+            
+            // Add authentication token if available
+            const token = localStorage.getItem('authToken');
+            console.log('🔑 Token from localStorage:', token ? `${token.substring(0, 20)}...` : 'null');
+            if (token) {
+                defaultOptions.headers.Authorization = `Bearer ${token}`;
+                console.log('✅ Authorization header added');
+            } else {
+                console.log('❌ No token found in localStorage');
+            }
+            
+            const config = {
+                ...defaultOptions,
+                ...options,
+                headers: {
+                    ...defaultOptions.headers,
+                    ...options.headers,
+                },
+            };
+            
+            try {
+                console.log(`🔍 API Request: ${config.method || 'GET'} ${url}`);
+                console.log('📤 Request config:', {
+                    headers: config.headers,
+                    body: config.body instanceof FormData ? 'FormData' : config.body
+                });
+                
+                const response = await fetch(url, config);
+                console.log(`📥 Response: ${response.status} ${response.statusText}`);
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    console.error('❌ API Error Response:', data);
+                    throw new Error(data.detail || `HTTP error! status: ${response.status}`);
+                }
+                
+                console.log('✅ API Success:', data);
+                return data;
+            } catch (error) {
+                console.error(`💥 API request failed: ${endpoint}`, error);
+                throw error;
+            }
+        }
+        
+        async function login(username, password) {
+            const formData = new FormData();
+            formData.append('username', username);
+            formData.append('password', password);
+            formData.append('grant_type', 'password');
+            
+            return apiRequest('/auth/token', {
+                method: 'POST',
+                body: formData,
+            });
+        }
+        
+        async function getCurrentUser() {
+            return apiRequest('/auth/me');
+        }
+        
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                showResult('Attempting login with frontend API logic...', 'info');
+                
+                // Step 1: Login
+                const response = await login(username, password);
+                showResult(`Login successful! Token: ${response.access_token.substring(0, 20)}...`, 'success');
+                
+                // Step 2: Store token
+                localStorage.setItem('authToken', response.access_token);
+                showResult('Token stored in localStorage', 'info');
+                
+                // Step 3: Get current user
+                const userInfo = await getCurrentUser();
+                showResult(`User info retrieved: ${userInfo.username} (ID: ${userInfo.user_id})`, 'success');
+                
+            } catch (error) {
+                showResult(`Authentication failed: ${error.message}`, 'error');
+            }
+        });
+        
+        // Initial check
+        checkLocalStorage();
+    </script>
+</body>
+</html>

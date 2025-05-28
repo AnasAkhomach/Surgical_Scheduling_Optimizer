@@ -59,7 +59,14 @@
     <div class="gantt-grid" ref="ganttGrid">
       <div class="gantt-time-axis">
         <!-- Hourly markers (adjust based on view mode) -->
-        <div v-for="hour in hours" :key="hour" class="time-marker">{{ formatHourMarker(hour) }}</div>
+        <div
+          v-for="hour in hours"
+          :key="hour"
+          class="time-marker"
+          :style="getTimeMarkerStyle(hour)"
+        >
+          {{ formatHourMarker(hour) }}
+        </div>
       </div>
       <div class="gantt-or-rows">
         <div
@@ -304,6 +311,38 @@ const formatHourMarker = (hour) => {
   return '';
 };
 
+// Calculate time marker positioning
+const getTimeMarkerStyle = (hour) => {
+  if (!currentDateRange || !currentDateRange.start) {
+    return { left: '0px', width: '100px' };
+  }
+
+  if (scheduleStore.ganttViewMode === 'Day') {
+    // For day view, position based on hour
+    const viewStartHour = currentDateRange.start.getHours();
+    const hourOffset = hour - viewStartHour;
+    const leftPosition = hourOffset * 60 * pixelsPerMinute.value; // 60 minutes per hour
+
+    return {
+      left: `${leftPosition}px`,
+      width: `${60 * pixelsPerMinute.value}px`, // Width of one hour
+      minWidth: '60px'
+    };
+  } else if (scheduleStore.ganttViewMode === 'Week') {
+    // For week view, position based on day
+    const daysDiff = Math.floor((hour.getTime() - currentDateRange.start.getTime()) / (1000 * 60 * 60 * 24));
+    const leftPosition = daysDiff * 24 * 60 * pixelsPerMinute.value; // 24 hours per day
+
+    return {
+      left: `${leftPosition}px`,
+      width: `${24 * 60 * pixelsPerMinute.value}px`, // Width of one day
+      minWidth: '100px'
+    };
+  }
+
+  return { left: '0px', width: '100px' };
+};
+
 // Get surgeries for a specific OR within the current view, sorted by time
 const getSurgeriesForOR = (orId) => {
   return scheduleStore.getSurgeriesForOR(orId);
@@ -444,6 +483,34 @@ const formatTime = (dateString) => {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
+// Get SDST explanation for tooltip
+const getSDSTExplanation = (surgery) => {
+  if (!surgery || !surgery.sdsTime) return 'No setup time required';
+
+  const precedingType = surgery.precedingType || 'Initial';
+  const currentType = surgery.type;
+
+  if (precedingType === 'Initial') {
+    return `Initial setup for ${currentType} surgery`;
+  } else {
+    return `Transition from ${precedingType} to ${currentType} surgery`;
+  }
+};
+
+// Get accessible label for surgery blocks
+const getSurgeryAccessibleLabel = (surgery) => {
+  const conflicts = surgery.conflicts && surgery.conflicts.length > 0
+    ? ` Warning: ${surgery.conflicts.length} conflict(s)`
+    : '';
+
+  return `Surgery: ${surgery.patientName}, Type: ${surgery.fullType}, Time: ${formatTime(surgery.startTime)} to ${formatTime(surgery.endTime)}, SDST: ${surgery.sdsTime} minutes${conflicts}`;
+};
+
+// Real-time SDST calculation and conflict detection using store method
+const calculateSDSTAndConflicts = (surgery, targetORId, proposedStartTime) => {
+  return scheduleStore.calculateSDSTForPosition(surgery, targetORId, proposedStartTime);
+};
+
 // Navigation and view controls
 const navigateDateRange = (direction) => {
   scheduleStore.navigateGanttDate(direction);
@@ -487,15 +554,38 @@ const onDragOver = (event, orId) => {
   event.preventDefault();
   event.dataTransfer.dropEffect = 'move';
 
-  // Update ghost position during drag
+  // Update ghost position and calculate real-time SDST during drag
   if (dragGhost.value.visible) {
     const ganttTimeline = event.target.closest('.or-timeline');
     if (ganttTimeline) {
       const timelineRect = ganttTimeline.getBoundingClientRect();
       const clickX = event.clientX - timelineRect.left;
 
-      // Update ghost position for visual feedback
-      // This would be implemented in a real app
+      // Calculate proposed time based on cursor position
+      const minutesFromViewStart = clickX / pixelsPerMinute.value;
+      const proposedStartTime = new Date(currentDateRange.start.getTime() + minutesFromViewStart * 60 * 1000);
+
+      // Get the dragged surgery data
+      const draggedSurgeryId = event.dataTransfer.getData('text/plain');
+      const draggedSurgery = scheduleStore.scheduledSurgeries.find(s => s.id === draggedSurgeryId) ||
+                            scheduleStore.pendingSurgeries.find(s => s.id === draggedSurgeryId);
+
+      if (draggedSurgery) {
+        // Calculate SDST for this position
+        const { sdsTime, conflicts } = calculateSDSTAndConflicts(draggedSurgery, orId, proposedStartTime);
+
+        // Update ghost with real-time feedback
+        dragGhost.value.sdstStyle = {
+          width: `${sdsTime * pixelsPerMinute.value}px`,
+          backgroundColor: sdsTime <= 15 ? 'var(--color-sdst-low, rgba(40, 167, 69, 0.4))' :
+                          sdsTime <= 30 ? 'var(--color-sdst-medium, rgba(255, 193, 7, 0.4))' :
+                          'var(--color-sdst-high, rgba(220, 53, 69, 0.4))'
+        };
+
+        // Update text with conflict information
+        const conflictText = conflicts.length > 0 ? ` (${conflicts.length} conflicts)` : '';
+        dragGhost.value.text = `${draggedSurgery.patientName} - ${draggedSurgery.type} | SDST: ${sdsTime}min${conflictText}`;
+      }
     }
   }
 };
@@ -534,47 +624,44 @@ const onDrop = (event, targetORId) => {
   const minutes = newStartTime.getMinutes();
   newStartTime.setMinutes(Math.round(minutes / 15) * 15, 0, 0);
 
-  // Call store action to reschedule
-  scheduleStore.rescheduleSurgery(surgeryId, targetORId, newStartTime);
+  // Get the surgery being dropped
+  const surgery = scheduleStore.scheduledSurgeries.find(s => s.id === surgeryId) ||
+                 scheduleStore.pendingSurgeries.find(s => s.id === surgeryId);
+
+  if (surgery) {
+    // Perform final conflict check before dropping
+    const { sdsTime, conflicts } = calculateSDSTAndConflicts(surgery, targetORId, newStartTime);
+
+    // Show conflicts to user if any exist
+    if (conflicts.length > 0) {
+      const confirmDrop = confirm(
+        `Warning: This placement has ${conflicts.length} conflict(s):\n\n${conflicts.join('\n')}\n\nDo you want to proceed anyway?`
+      );
+
+      if (!confirmDrop) {
+        draggedSurgeryId.value = null;
+        dragGhost.value.visible = false;
+        return;
+      }
+    }
+
+    console.log(`Dropping surgery ${surgeryId} in OR ${targetORId} at ${newStartTime.toISOString()} with SDST: ${sdsTime}min`);
+
+    // Check if this is a pending surgery (schedule it) or existing surgery (reschedule it)
+    const isPendingSurgery = scheduleStore.pendingSurgeries.some(p => p.id === surgeryId);
+
+    if (isPendingSurgery) {
+      scheduleStore.addSurgeryFromPending(surgeryId, targetORId, newStartTime);
+    } else {
+      scheduleStore.rescheduleSurgery(surgeryId, targetORId, newStartTime);
+    }
+  }
 
   draggedSurgeryId.value = null;
   dragGhost.value.visible = false;
 };
 
-// Get a human-readable explanation of the SDST
-const getSDSTExplanation = (surgery) => {
-  if (!surgery || !surgery.sdsTime) return '';
 
-  const fromType = surgery.precedingType || 'Initial';
-  const toType = surgery.type;
-
-  let explanation = '';
-
-  if (surgery.sdsTime <= 15) {
-    explanation = `Quick transition from ${fromType} to ${toType} surgery.`;
-  } else if (surgery.sdsTime <= 30) {
-    explanation = `Standard setup time required when transitioning from ${fromType} to ${toType} surgery.`;
-  } else {
-    explanation = `Extended setup time required when transitioning from ${fromType} to ${toType} surgery.`;
-  }
-
-  return explanation;
-};
-
-// Accessibility
-const getSurgeryAccessibleLabel = (surgery) => {
-  let label = `Surgery: ${surgery.fullType} for ${surgery.patientName}, scheduled in OR ${surgery.orName} from ${formatTime(surgery.startTime)} to ${formatTime(surgery.endTime)}. Estimated duration: ${surgery.estimatedDuration} minutes.`;
-
-  if (surgery.sdsTime > 0) {
-    label += ` Requires ${surgery.sdsTime} minutes setup time due to preceding ${surgery.precedingType || 'Initial'} surgery.`;
-  }
-
-  if (surgery.conflicts && surgery.conflicts.length > 0) {
-    label += ` Alerts: ${surgery.conflicts.join(', ')}.`;
-  }
-
-  return label;
-};
 
 // Update current time indicator periodically
 let currentTimeInterval = null;
@@ -1139,12 +1226,41 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-/* Responsive Adjustments */
-@media (max-width: 768px) {
+/* Enhanced Mobile Responsive Design */
+
+/* Tablet adjustments (768px - 1024px) */
+@media (max-width: 1024px) {
   .gantt-header {
     flex-direction: column;
     align-items: flex-start;
     gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
+  }
+
+  .view-controls {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+  }
+
+  .view-controls select,
+  .view-controls button {
+    min-height: var(--touch-target-min);
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+}
+
+/* Mobile adjustments (up to 768px) */
+@media (max-width: 768px) {
+  .gantt-chart {
+    font-size: var(--font-size-sm);
+  }
+
+  .gantt-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm);
   }
 
   .view-controls {
@@ -1153,8 +1269,18 @@ onUnmounted(() => {
     gap: var(--spacing-sm);
   }
 
+  .view-controls select,
+  .view-controls button {
+    width: 100%;
+    min-height: var(--touch-target-comfortable);
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: var(--font-size-base);
+  }
+
   .or-label, .time-marker {
-    width: 80px; /* Smaller width on mobile */
+    width: 60px; /* Smaller width on mobile */
+    font-size: var(--font-size-xs);
+    padding: var(--spacing-xs);
   }
 
   .or-timeline {
@@ -1163,8 +1289,30 @@ onUnmounted(() => {
       var(--color-border-soft) 0px,
       var(--color-border-soft) 1px,
       transparent 1px,
-      transparent 80px /* Smaller width per hour on mobile */
+      transparent 60px /* Smaller width per hour on mobile */
     );
+  }
+
+  .surgery-block {
+    min-height: 40px; /* Larger touch targets */
+    font-size: var(--font-size-xs);
+    padding: var(--spacing-xs);
+  }
+
+  .surgery-block .surgery-info {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .surgery-block .surgery-title {
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-bold);
+  }
+
+  .surgery-block .surgery-details {
+    font-size: 10px;
+    opacity: 0.8;
   }
 
   .sdst-legend {
@@ -1175,14 +1323,127 @@ onUnmounted(() => {
 
   .legend-items {
     margin-top: var(--spacing-xs);
+    flex-wrap: wrap;
+    gap: var(--spacing-xs);
   }
 
   .legend-item {
-    margin-right: var(--spacing-sm);
+    margin-right: 0;
+    margin-bottom: var(--spacing-xs);
+    font-size: var(--font-size-xs);
   }
 
   .sdst-label {
     display: none; /* Hide SDST labels on mobile */
+  }
+
+  /* Mobile-specific gantt container */
+  .gantt-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Simplified mobile view */
+  .mobile-simplified .surgery-block .surgery-details {
+    display: none;
+  }
+
+  .mobile-simplified .sdst-indicator {
+    display: none;
+  }
+}
+
+/* Small mobile adjustments (up to 480px) */
+@media (max-width: 480px) {
+  .gantt-header {
+    padding: var(--spacing-xs);
+  }
+
+  .or-label, .time-marker {
+    width: 50px;
+    font-size: 10px;
+  }
+
+  .or-timeline {
+    background-image: repeating-linear-gradient(
+      to right,
+      var(--color-border-soft) 0px,
+      var(--color-border-soft) 1px,
+      transparent 1px,
+      transparent 50px
+    );
+  }
+
+  .surgery-block {
+    min-height: 36px;
+    font-size: 10px;
+  }
+
+  .surgery-block .surgery-title {
+    font-size: 10px;
+  }
+
+  .legend-item {
+    font-size: 10px;
+  }
+
+  .legend-color {
+    width: 16px;
+    height: 8px;
+  }
+
+  .legend-icon {
+    width: 14px;
+    height: 14px;
+    font-size: 8px;
+  }
+}
+
+/* Touch-specific enhancements */
+@media (hover: none) and (pointer: coarse) {
+  .surgery-block {
+    min-height: var(--touch-target-comfortable);
+    cursor: default;
+  }
+
+  .surgery-block:hover {
+    transform: none; /* Disable hover transforms on touch devices */
+  }
+
+  .surgery-block:active {
+    transform: scale(0.98);
+    transition: transform 0.1s ease;
+  }
+
+  .view-controls button:active {
+    transform: scale(0.95);
+  }
+}
+
+/* Landscape orientation for mobile */
+@media (max-height: 500px) and (orientation: landscape) {
+  .gantt-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-xs) var(--spacing-sm);
+  }
+
+  .view-controls {
+    flex-direction: row;
+    width: auto;
+  }
+
+  .view-controls select,
+  .view-controls button {
+    width: auto;
+    min-height: 36px;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: var(--font-size-sm);
+  }
+
+  .surgery-block {
+    min-height: 32px;
   }
 }
 

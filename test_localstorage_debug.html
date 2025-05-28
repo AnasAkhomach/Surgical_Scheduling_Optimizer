@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>localStorage Debug Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin: 5px; }
+        button:hover { background: #0056b3; }
+        .result { margin-top: 20px; padding: 10px; border-radius: 4px; background: #f8f9fa; border: 1px solid #dee2e6; }
+        pre { white-space: pre-wrap; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>localStorage Debug Test</h1>
+        
+        <div>
+            <button onclick="testLocalStorage()">Test localStorage Basic Operations</button>
+            <button onclick="simulateAuthFlow()">Simulate Auth Flow</button>
+            <button onclick="checkCurrentStorage()">Check Current Storage</button>
+            <button onclick="clearStorage()">Clear Storage</button>
+        </div>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function log(message) {
+            const resultsDiv = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = 'result';
+            resultDiv.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong>: ${message}`;
+            resultsDiv.appendChild(resultDiv);
+            resultsDiv.scrollTop = resultsDiv.scrollHeight;
+        }
+        
+        function testLocalStorage() {
+            log('Testing localStorage basic operations...');
+            
+            try {
+                // Test basic set/get
+                localStorage.setItem('test', 'value');
+                const retrieved = localStorage.getItem('test');
+                
+                if (retrieved === 'value') {
+                    log('✅ localStorage basic operations working');
+                } else {
+                    log('❌ localStorage basic operations failed');
+                    return;
+                }
+                
+                // Test with complex data
+                const testData = { token: 'test-token-123', user: 'testuser' };
+                localStorage.setItem('testData', JSON.stringify(testData));
+                const retrievedData = JSON.parse(localStorage.getItem('testData'));
+                
+                if (retrievedData.token === 'test-token-123') {
+                    log('✅ localStorage complex data operations working');
+                } else {
+                    log('❌ localStorage complex data operations failed');
+                }
+                
+                // Clean up
+                localStorage.removeItem('test');
+                localStorage.removeItem('testData');
+                
+            } catch (error) {
+                log(`❌ localStorage test error: ${error.message}`);
+            }
+        }
+        
+        async function simulateAuthFlow() {
+            log('Simulating authentication flow...');
+            
+            try {
+                // Step 1: Clear existing data
+                localStorage.removeItem('authToken');
+                localStorage.removeItem('isAuthenticated');
+                localStorage.removeItem('user');
+                log('1. Cleared existing localStorage data');
+                
+                // Step 2: Simulate login API call
+                const loginData = new FormData();
+                loginData.append('username', 'admin2');
+                loginData.append('password', 'admin2admin2');
+                loginData.append('grant_type', 'password');
+                
+                log('2. Sending login request...');
+                const loginResponse = await fetch('http://localhost:8000/api/auth/token', {
+                    method: 'POST',
+                    body: loginData
+                });
+                
+                if (loginResponse.ok) {
+                    const tokenData = await loginResponse.json();
+                    log(`3. ✅ Login successful, token received: ${tokenData.access_token.substring(0, 30)}...`);
+                    
+                    // Step 3: Store token immediately
+                    localStorage.setItem('authToken', tokenData.access_token);
+                    localStorage.setItem('isAuthenticated', 'true');
+                    log('4. Token stored in localStorage');
+                    
+                    // Step 4: Verify storage immediately
+                    const storedToken = localStorage.getItem('authToken');
+                    if (storedToken === tokenData.access_token) {
+                        log('5. ✅ Token verified in localStorage immediately after storage');
+                    } else {
+                        log('5. ❌ Token NOT found in localStorage after storage!');
+                        return;
+                    }
+                    
+                    // Step 5: Wait a moment and check again
+                    setTimeout(() => {
+                        const tokenAfterDelay = localStorage.getItem('authToken');
+                        if (tokenAfterDelay === tokenData.access_token) {
+                            log('6. ✅ Token still in localStorage after delay');
+                        } else {
+                            log('6. ❌ Token disappeared from localStorage after delay!');
+                        }
+                    }, 100);
+                    
+                    // Step 6: Test API call with stored token
+                    setTimeout(async () => {
+                        const currentToken = localStorage.getItem('authToken');
+                        log(`7. Testing /auth/me with token from localStorage: ${currentToken ? currentToken.substring(0, 30) + '...' : 'null'}`);
+                        
+                        if (currentToken) {
+                            const headers = {
+                                'Authorization': `Bearer ${currentToken}`,
+                                'Content-Type': 'application/json'
+                            };
+                            
+                            const meResponse = await fetch('http://localhost:8000/api/auth/me', { headers });
+                            
+                            if (meResponse.ok) {
+                                const userData = await meResponse.json();
+                                log(`8. ✅ /auth/me successful with stored token! User: ${userData.username}`);
+                            } else {
+                                log(`8. ❌ /auth/me failed with stored token: ${meResponse.status}`);
+                                const errorData = await meResponse.json();
+                                log(`   Error details: ${JSON.stringify(errorData)}`);
+                            }
+                        } else {
+                            log('8. ❌ No token found in localStorage for /auth/me test');
+                        }
+                    }, 200);
+                    
+                } else {
+                    log(`3. ❌ Login failed: ${loginResponse.status}`);
+                }
+                
+            } catch (error) {
+                log(`❌ Auth flow simulation error: ${error.message}`);
+            }
+        }
+        
+        function checkCurrentStorage() {
+            log('Checking current localStorage contents...');
+            
+            const authToken = localStorage.getItem('authToken');
+            const isAuthenticated = localStorage.getItem('isAuthenticated');
+            const user = localStorage.getItem('user');
+            
+            log(`<pre>authToken: ${authToken ? authToken.substring(0, 50) + '...' : 'null'}
+isAuthenticated: ${isAuthenticated}
+user: ${user ? JSON.stringify(JSON.parse(user), null, 2) : 'null'}</pre>`);
+        }
+        
+        function clearStorage() {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('isAuthenticated');
+            localStorage.removeItem('user');
+            log('localStorage cleared');
+        }
+        
+        // Initial check
+        checkCurrentStorage();
+    </script>
+</body>
+</html>

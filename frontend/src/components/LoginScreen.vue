@@ -34,18 +34,75 @@
       <!-- Registration Form -->
       <form v-if="isRegistering" class="login-form" @submit.prevent="handleRegister">
         <div class="input-group">
-          <label for="new-username">Username</label>
-          <input type="text" id="new-username" v-model="newUsername" required autocomplete="new-username">
+          <label for="new-username">Username *</label>
+          <input
+            type="text"
+            id="new-username"
+            v-model="newUsername"
+            required
+            autocomplete="new-username"
+            :class="{ 'error': validationErrors.username }"
+            @blur="validateUsername"
+          >
+          <span v-if="validationErrors.username" class="field-error">{{ validationErrors.username }}</span>
         </div>
         <div class="input-group">
-          <label for="new-password">Password</label>
-          <input type="password" id="new-password" v-model="newPassword" required autocomplete="new-password">
+          <label for="new-email">Email *</label>
+          <input
+            type="email"
+            id="new-email"
+            v-model="newEmail"
+            required
+            autocomplete="email"
+            :class="{ 'error': validationErrors.email }"
+            @blur="validateEmail"
+          >
+          <span v-if="validationErrors.email" class="field-error">{{ validationErrors.email }}</span>
         </div>
         <div class="input-group">
-          <label for="confirm-password">Confirm Password</label>
-          <input type="password" id="confirm-password" v-model="confirmPassword" required autocomplete="new-password">
+          <label for="full-name">Full Name</label>
+          <input
+            type="text"
+            id="full-name"
+            v-model="fullName"
+            autocomplete="name"
+          >
         </div>
-        <button type="submit" class="login-button" :disabled="isLoading">{{ isLoading ? 'Creating Account...' : 'Create Account' }}</button>
+        <div class="input-group">
+          <label for="new-password">Password *</label>
+          <input
+            type="password"
+            id="new-password"
+            v-model="newPassword"
+            required
+            autocomplete="new-password"
+            :class="{ 'error': validationErrors.password }"
+            @blur="validatePassword"
+          >
+          <span v-if="validationErrors.password" class="field-error">{{ validationErrors.password }}</span>
+          <div class="password-strength" v-if="newPassword">
+            <div class="strength-bar">
+              <div :class="['strength-fill', passwordStrength.class]" :style="{ width: passwordStrength.width }"></div>
+            </div>
+            <span :class="['strength-text', passwordStrength.class]">{{ passwordStrength.text }}</span>
+          </div>
+        </div>
+        <div class="input-group">
+          <label for="confirm-password">Confirm Password *</label>
+          <input
+            type="password"
+            id="confirm-password"
+            v-model="confirmPassword"
+            required
+            autocomplete="new-password"
+            :class="{ 'error': validationErrors.confirmPassword }"
+            @blur="validateConfirmPassword"
+          >
+          <span v-if="validationErrors.confirmPassword" class="field-error">{{ validationErrors.confirmPassword }}</span>
+        </div>
+        <button type="submit" class="login-button" :disabled="isLoading || !isFormValid">
+          {{ isLoading ? 'Creating Account...' : 'Create Account' }}
+        </button>
          <!-- Display registration errors/success -->
         <p v-if="registrationError" class="error-message" aria-live="polite">{{ registrationError }}</p>
         <p v-if="registrationSuccess" class="success-message" aria-live="polite">{{ registrationSuccess }}</p>
@@ -64,7 +121,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -77,12 +134,124 @@ const loginError = ref('');
 
 const isRegistering = ref(false);
 const newUsername = ref('');
+const newEmail = ref('');
+const fullName = ref('');
 const newPassword = ref('');
 const confirmPassword = ref('');
 const registrationError = ref('');
 const registrationSuccess = ref('');
 
 const isLoading = ref(false); // State to manage loading indicator
+
+// Validation
+const validationErrors = ref({
+  username: '',
+  email: '',
+  password: '',
+  confirmPassword: ''
+});
+
+// Computed properties
+const passwordStrength = computed(() => {
+  const password = newPassword.value;
+  if (!password) return { class: '', width: '0%', text: '' };
+
+  let score = 0;
+  let feedback = [];
+
+  // Length check
+  if (password.length >= 8) score += 1;
+  else feedback.push('at least 8 characters');
+
+  // Uppercase check
+  if (/[A-Z]/.test(password)) score += 1;
+  else feedback.push('uppercase letter');
+
+  // Lowercase check
+  if (/[a-z]/.test(password)) score += 1;
+  else feedback.push('lowercase letter');
+
+  // Number check
+  if (/\d/.test(password)) score += 1;
+  else feedback.push('number');
+
+  // Special character check
+  if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) score += 1;
+  else feedback.push('special character');
+
+  const strength = {
+    0: { class: 'very-weak', width: '20%', text: 'Very Weak' },
+    1: { class: 'weak', width: '40%', text: 'Weak' },
+    2: { class: 'fair', width: '60%', text: 'Fair' },
+    3: { class: 'good', width: '80%', text: 'Good' },
+    4: { class: 'strong', width: '100%', text: 'Strong' },
+    5: { class: 'very-strong', width: '100%', text: 'Very Strong' }
+  };
+
+  return strength[score] || strength[0];
+});
+
+const isFormValid = computed(() => {
+  return newUsername.value &&
+         newEmail.value &&
+         newPassword.value &&
+         confirmPassword.value &&
+         !validationErrors.value.username &&
+         !validationErrors.value.email &&
+         !validationErrors.value.password &&
+         !validationErrors.value.confirmPassword;
+});
+
+// Validation functions
+const validateUsername = () => {
+  const username = newUsername.value.trim();
+  if (!username) {
+    validationErrors.value.username = 'Username is required';
+  } else if (username.length < 3) {
+    validationErrors.value.username = 'Username must be at least 3 characters';
+  } else if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+    validationErrors.value.username = 'Username can only contain letters, numbers, and underscores';
+  } else {
+    validationErrors.value.username = '';
+  }
+};
+
+const validateEmail = () => {
+  const email = newEmail.value.trim();
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email) {
+    validationErrors.value.email = 'Email is required';
+  } else if (!emailRegex.test(email)) {
+    validationErrors.value.email = 'Please enter a valid email address';
+  } else {
+    validationErrors.value.email = '';
+  }
+};
+
+const validatePassword = () => {
+  const password = newPassword.value;
+  if (!password) {
+    validationErrors.value.password = 'Password is required';
+  } else if (password.length < 8) {
+    validationErrors.value.password = 'Password must be at least 8 characters';
+  } else {
+    validationErrors.value.password = '';
+  }
+  // Re-validate confirm password if it exists
+  if (confirmPassword.value) {
+    validateConfirmPassword();
+  }
+};
+
+const validateConfirmPassword = () => {
+  if (!confirmPassword.value) {
+    validationErrors.value.confirmPassword = 'Please confirm your password';
+  } else if (newPassword.value !== confirmPassword.value) {
+    validationErrors.value.confirmPassword = 'Passwords do not match';
+  } else {
+    validationErrors.value.confirmPassword = '';
+  }
+};
 
 // --- Authentication Logic ---
 const handleLogin = async () => {
@@ -117,24 +286,42 @@ const handleRegister = async () => {
   registrationError.value = '';
   registrationSuccess.value = ''; // Clear previous success/error messages
 
-  if (!newUsername.value || !newPassword.value || !confirmPassword.value) {
-    registrationError.value = 'Please fill in all fields.';
-    return;
-  }
-  if (newPassword.value !== confirmPassword.value) {
-    registrationError.value = 'Passwords do not match.';
+  // Validate all fields
+  validateUsername();
+  validateEmail();
+  validatePassword();
+  validateConfirmPassword();
+
+  // Check if form is valid
+  if (!isFormValid.value) {
+    registrationError.value = 'Please fix the errors above.';
     return;
   }
 
   isLoading.value = true; // Show loading indicator
 
   try {
-    const success = await authStore.register(newUsername.value, newPassword.value);
+    const success = await authStore.register(
+      newUsername.value,
+      newPassword.value,
+      newEmail.value,
+      fullName.value
+    );
     if (success) {
       registrationSuccess.value = 'Account created successfully! Please log in.';
+      // Clear form
       newUsername.value = '';
+      newEmail.value = '';
+      fullName.value = '';
       newPassword.value = '';
       confirmPassword.value = '';
+      // Clear validation errors
+      validationErrors.value = {
+        username: '',
+        email: '',
+        password: '',
+        confirmPassword: ''
+      };
       isRegistering.value = false; // Switch to login form
     } else {
       // Check authStore.error for the specific error message
@@ -222,7 +409,8 @@ const toggleForm = () => {
 }
 
 .input-group input[type="text"],
-.input-group input[type="password"] {
+.input-group input[type="password"],
+.input-group input[type="email"] {
   width: 100%;
   padding: var(--spacing-sm); /* Use global spacing variable */
   border: 1px solid var(--color-gray); /* Use global border color variable */
@@ -231,6 +419,12 @@ const toggleForm = () => {
   font-size: var(--font-size-base); /* Use global font size variable */
   color: var(--color-very-dark-gray);
   background-color: var(--color-white);
+  transition: border-color 0.2s ease;
+}
+
+.input-group input.error {
+  border-color: #dc3545;
+  box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
 }
 
 /* Consistent focus styles using global variables */
@@ -312,5 +506,83 @@ const toggleForm = () => {
   margin-top: var(--spacing-md); /* Use global spacing variable */
   font-size: var(--font-size-sm); /* Use global font size variable */
   text-align: center;
+}
+
+.field-error {
+  color: #dc3545;
+  font-size: 12px;
+  margin-top: 4px;
+  display: block;
+}
+
+.password-strength {
+  margin-top: 8px;
+}
+
+.strength-bar {
+  width: 100%;
+  height: 4px;
+  background-color: #e9ecef;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.strength-fill {
+  height: 100%;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.strength-fill.very-weak {
+  background-color: #dc3545;
+}
+
+.strength-fill.weak {
+  background-color: #fd7e14;
+}
+
+.strength-fill.fair {
+  background-color: #ffc107;
+}
+
+.strength-fill.good {
+  background-color: #20c997;
+}
+
+.strength-fill.strong {
+  background-color: #28a745;
+}
+
+.strength-fill.very-strong {
+  background-color: #198754;
+}
+
+.strength-text {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.strength-text.very-weak {
+  color: #dc3545;
+}
+
+.strength-text.weak {
+  color: #fd7e14;
+}
+
+.strength-text.fair {
+  color: #ffc107;
+}
+
+.strength-text.good {
+  color: #20c997;
+}
+
+.strength-text.strong {
+  color: #28a745;
+}
+
+.strength-text.very-strong {
+  color: #198754;
 }
 </style>

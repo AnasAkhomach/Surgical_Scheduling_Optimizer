@@ -18,6 +18,7 @@ import AdministrationScreen from '../components/AdministrationScreen.vue';
 import MyProfileSettingsScreen from '../components/MyProfileSettingsScreen.vue';
 import HelpDocumentationScreen from '../components/HelpDocumentationScreen.vue';
 import NotFound from '../components/NotFound.vue';
+import MobileTestComponent from '../components/MobileTestComponent.vue';
 
 // Import the authentication store
 import { useAuthStore } from '@/stores/authStore';
@@ -50,6 +51,11 @@ const routes = [
             path: '/scheduling',
             name: 'Scheduling',
             component: SchedulingScreen,
+        },
+        {
+            path: '/master-schedule',
+            name: 'MasterSchedule',
+            component: () => import('../components/MasterScheduleScreen.vue'),
         },
         {
             path: '/resource-management',
@@ -98,6 +104,11 @@ const routes = [
             component: AdministrationScreen,
         },
         {
+            path: '/patient-management',
+            name: 'PatientManagement',
+            component: () => import('../components/PatientManagementScreen.vue'),
+        },
+        {
             path: '/my-profile-settings',
             name: 'MyProfileSettings',
             component: MyProfileSettingsScreen,
@@ -106,6 +117,16 @@ const routes = [
             path: '/help-documentation',
             name: 'HelpDocumentation',
             component: HelpDocumentationScreen,
+        },
+        {
+            path: '/optimization',
+            name: 'OptimizationEngine',
+            component: () => import('../components/OptimizationEngine.vue'),
+        },
+        {
+            path: '/mobile-test',
+            name: 'MobileTest',
+            component: MobileTestComponent,
         },
          // Add a redirect for the base authenticated path if needed
         {

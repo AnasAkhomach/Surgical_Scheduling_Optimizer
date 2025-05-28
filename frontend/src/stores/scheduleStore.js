@@ -756,6 +756,66 @@ export const useScheduleStore = defineStore('schedule', {
          console.error("Deleting surgery type failed:", err);
          this.isLoading = false;
        }
+     },
+
+     // Real-time SDST calculation for drag and drop operations
+     calculateSDSTForPosition(surgery, targetORId, proposedStartTime) {
+       const conflicts = [];
+       let sdsTime = 0;
+
+       // Get surgeries in the target OR, sorted by time, excluding the surgery being moved
+       const surgeriesInOR = this.scheduledSurgeries
+         .filter(s => s.orId === targetORId && s.id !== surgery.id)
+         .sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+
+       // Find preceding surgery
+       const precedingSurgery = surgeriesInOR
+         .filter(s => new Date(s.endTime) <= proposedStartTime)
+         .pop(); // Get the last one before proposed time
+
+       // Calculate SDST
+       if (precedingSurgery) {
+         const precedingType = precedingSurgery.type;
+         sdsTime = this.sdsRules[precedingType]?.[surgery.type] || 0;
+       } else {
+         // First surgery of the day
+         sdsTime = this.initialSetupTimes[surgery.type] || 0;
+       }
+
+       // Check for SDST violation
+       if (precedingSurgery) {
+         const gapBefore = (proposedStartTime.getTime() - new Date(precedingSurgery.endTime).getTime()) / (1000 * 60);
+         if (gapBefore < sdsTime) {
+           conflicts.push(`SDST Violation: Requires ${sdsTime} min setup, only ${Math.max(0, Math.floor(gapBefore))} min available`);
+         }
+       }
+
+       // Check for overlaps with existing surgeries
+       const proposedEndTime = new Date(proposedStartTime.getTime() + (surgery.estimatedDuration + sdsTime) * 60 * 1000);
+
+       surgeriesInOR.forEach(existingSurgery => {
+         const existingStart = new Date(existingSurgery.startTime);
+         const existingEnd = new Date(existingSurgery.endTime);
+
+         // Check for time overlap
+         if (proposedStartTime < existingEnd && proposedEndTime > existingStart) {
+           conflicts.push(`Time conflict with ${existingSurgery.patientName} (${existingStart.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${existingEnd.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`);
+         }
+       });
+
+       // Check for surgeon conflicts
+       const surgeonConflicts = this.scheduledSurgeries.filter(s =>
+         s.id !== surgery.id &&
+         s.surgeonId === surgery.surgeonId &&
+         proposedStartTime < new Date(s.endTime) &&
+         proposedEndTime > new Date(s.startTime)
+       );
+
+       surgeonConflicts.forEach(conflict => {
+         conflicts.push(`Surgeon ${surgery.requiredSurgeons?.[0] || 'conflict'} unavailable (scheduled in ${conflict.orName})`);
+       });
+
+       return { sdsTime, conflicts };
      }
   }
 });

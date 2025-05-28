@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cache Test Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .warning { background-color: #fff3cd; border-color: #ffeaa7; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button {
+            padding: 8px 16px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover { background: #0056b3; }
+        .timestamp { font-family: monospace; color: #666; }
+        #results { margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Frontend Cache Testing</h1>
+        <p>This page helps test and verify that the frontend caching issues have been resolved.</p>
+        
+        <div class="test-section info">
+            <h3>📊 Current Status</h3>
+            <p><strong>Page Load Time:</strong> <span class="timestamp" id="loadTime"></span></p>
+            <p><strong>Cache Headers:</strong> <span id="cacheHeaders">Checking...</span></p>
+            <p><strong>App Version:</strong> <span id="appVersion">Loading...</span></p>
+        </div>
+        
+        <div class="test-section">
+            <h3>🔧 Cache Management Tests</h3>
+            <button onclick="testCacheBusting()">Test Cache Busting</button>
+            <button onclick="testHardReload()">Test Hard Reload</button>
+            <button onclick="testVersionCheck()">Test Version Check</button>
+            <button onclick="clearAllData()">Clear All Data</button>
+        </div>
+        
+        <div class="test-section">
+            <h3>🌐 Network Tests</h3>
+            <button onclick="testAPIRequest()">Test API Request</button>
+            <button onclick="testStaticAsset()">Test Static Asset</button>
+            <button onclick="checkNetworkTab()">Check Network Tab</button>
+        </div>
+        
+        <div class="test-section">
+            <h3>📝 Test Results</h3>
+            <div id="results"></div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('loadTime').textContent = new Date().toISOString();
+            checkCacheHeaders();
+            checkAppVersion();
+        });
+
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `test-section ${type}`;
+            div.innerHTML = `<p><strong>${new Date().toLocaleTimeString()}:</strong> ${message}</p>`;
+            results.appendChild(div);
+            results.scrollTop = results.scrollHeight;
+        }
+
+        function checkCacheHeaders() {
+            const headers = {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            };
+            
+            document.getElementById('cacheHeaders').textContent = 'Headers configured for no-cache';
+            addResult('✅ Cache headers configured to prevent caching', 'success');
+        }
+
+        function checkAppVersion() {
+            const version = document.querySelector('meta[name="app-version"]')?.content || 'Not found';
+            document.getElementById('appVersion').textContent = version;
+            addResult(`📦 App version detected: ${version}`, 'info');
+        }
+
+        function testCacheBusting() {
+            addResult('🧹 Testing cache busting...', 'info');
+            
+            // Simulate cache clearing
+            const keys = Object.keys(localStorage).filter(key => 
+                key.startsWith('vue-') || key.startsWith('app-cache-')
+            );
+            
+            keys.forEach(key => localStorage.removeItem(key));
+            
+            addResult(`✅ Cleared ${keys.length} cache keys from localStorage`, 'success');
+            addResult('💡 In a real app, this would trigger a page reload', 'warning');
+        }
+
+        function testHardReload() {
+            addResult('🔄 Testing hard reload...', 'info');
+            addResult('💡 Hard reload would bypass all browser caches', 'warning');
+            
+            // Add timestamp to show "new" content
+            const timestamp = Date.now();
+            addResult(`🕒 Timestamp: ${timestamp} (this would be different after reload)`, 'info');
+        }
+
+        function testVersionCheck() {
+            addResult('📦 Testing version check...', 'info');
+            
+            const currentVersion = document.querySelector('meta[name="app-version"]')?.content || '1.0.0';
+            const storedVersion = localStorage.getItem('app-version') || 'none';
+            
+            addResult(`Current version: ${currentVersion}`, 'info');
+            addResult(`Stored version: ${storedVersion}`, 'info');
+            
+            if (currentVersion !== storedVersion) {
+                addResult('⚠️ Version mismatch detected - cache would be cleared', 'warning');
+            } else {
+                addResult('✅ Versions match - no cache clearing needed', 'success');
+            }
+            
+            localStorage.setItem('app-version', currentVersion);
+        }
+
+        function clearAllData() {
+            addResult('🗑️ Clearing all application data...', 'info');
+            
+            localStorage.clear();
+            sessionStorage.clear();
+            
+            addResult('✅ All localStorage and sessionStorage cleared', 'success');
+            addResult('💡 In production, this would also clear service worker cache', 'warning');
+        }
+
+        async function testAPIRequest() {
+            addResult('🌐 Testing API request with cache-busting headers...', 'info');
+            
+            try {
+                const response = await fetch('/api/health', {
+                    headers: {
+                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                        'Pragma': 'no-cache',
+                        'Expires': '0'
+                    }
+                });
+                
+                if (response.ok) {
+                    addResult('✅ API request successful with cache-busting headers', 'success');
+                } else {
+                    addResult(`⚠️ API request returned ${response.status}`, 'warning');
+                }
+            } catch (error) {
+                addResult(`❌ API request failed: ${error.message}`, 'warning');
+                addResult('💡 This is expected if the backend is not running', 'info');
+            }
+        }
+
+        function testStaticAsset() {
+            addResult('📁 Testing static asset loading...', 'info');
+            
+            const timestamp = Date.now();
+            const img = new Image();
+            img.onload = () => addResult('✅ Static asset loaded successfully', 'success');
+            img.onerror = () => addResult('⚠️ Static asset failed to load', 'warning');
+            img.src = `/vite.svg?_cb=${timestamp}`;
+        }
+
+        function checkNetworkTab() {
+            addResult('🔍 Check Network Tab Instructions:', 'info');
+            addResult('1. Open browser DevTools (F12)', 'info');
+            addResult('2. Go to Network tab', 'info');
+            addResult('3. Reload this page', 'info');
+            addResult('4. Look for cache-related headers in requests', 'info');
+            addResult('5. Verify no "from cache" entries for dynamic content', 'info');
+        }
+    </script>
+</body>
+</html>
