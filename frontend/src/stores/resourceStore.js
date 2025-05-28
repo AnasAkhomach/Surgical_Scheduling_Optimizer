@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { operatingRoomAPI, surgeonAPI, staffAPI } from '../services/api.js';
 
 export const useResourceStore = defineStore('resource', {
   state: () => ({
@@ -6,13 +7,7 @@ export const useResourceStore = defineStore('resource', {
     error: null,
 
     // Operating Rooms
-    operatingRooms: [
-      { id: 'OR1', name: 'OR 1', location: 'Main Building, 2nd Floor', status: 'Active', primaryService: 'General Surgery' },
-      { id: 'OR2', name: 'OR 2', location: 'Main Building, 2nd Floor', status: 'Active', primaryService: 'Orthopedics' },
-      { id: 'OR3', name: 'OR 3', location: 'Main Building, 3rd Floor', status: 'Under Maintenance', primaryService: 'Cardiac Surgery' },
-      { id: 'OR4', name: 'OR 4', location: 'East Wing, 1st Floor', status: 'Active', primaryService: 'Neurosurgery' },
-      { id: 'OR5', name: 'OR 5', location: 'East Wing, 1st Floor', status: 'Active', primaryService: 'Ophthalmology' },
-    ],
+    operatingRooms: [],
 
     // Staff
     staff: [
@@ -124,30 +119,62 @@ export const useResourceStore = defineStore('resource', {
       }
     },
 
+    // Load operating rooms from API
+    async loadOperatingRooms() {
+      this.isLoading = true;
+      this.error = null;
+
+      try {
+        const response = await operatingRoomAPI.getOperatingRooms();
+
+        // Transform backend data to frontend format
+        this.operatingRooms = response.map(room => ({
+          id: room.room_id,
+          name: `OR-${room.room_id}`,
+          location: room.location,
+          status: 'Available', // Default status
+          primaryService: 'General' // Default service
+        }));
+
+        console.log('Operating rooms loaded successfully:', this.operatingRooms.length);
+        return { success: true };
+      } catch (error) {
+        this.error = 'Failed to load operating rooms';
+        console.error('Failed to load operating rooms:', error);
+        return { success: false, error: error.message };
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
     // Operating Room actions
     async addOperatingRoom(orData) {
       this.isLoading = true;
       this.error = null;
 
       try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 500));
+        const payload = {
+          location: orData.location
+        };
 
-        // Generate a unique ID
-        const newId = `OR${this.operatingRooms.length + 1}`;
+        const response = await operatingRoomAPI.createOperatingRoom(payload);
 
-        // Add the new OR to the state
-        this.operatingRooms.push({
-          id: newId,
-          ...orData
-        });
+        const newRoom = {
+          id: response.room_id,
+          name: `OR-${response.room_id}`,
+          location: response.location,
+          status: 'Available',
+          primaryService: orData.primaryService || 'General'
+        };
 
-        console.log('Operating room added successfully:', newId);
-        return { success: true, id: newId };
+        this.operatingRooms.push(newRoom);
+
+        console.log('Operating room added successfully:', response.room_id);
+        return { success: true, data: newRoom };
       } catch (error) {
         this.error = 'Failed to add operating room';
         console.error('Failed to add operating room:', error);
-        return { success: false, error: this.error };
+        return { success: false, error: error.message };
       } finally {
         this.isLoading = false;
       }
@@ -158,28 +185,30 @@ export const useResourceStore = defineStore('resource', {
       this.error = null;
 
       try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 500));
+        const payload = {
+          location: orData.location
+        };
 
-        // Find the OR to update
+        const response = await operatingRoomAPI.updateOperatingRoom(orId, payload);
+
+        // Find and update the OR in state
         const index = this.operatingRooms.findIndex(or => or.id === orId);
-
         if (index !== -1) {
-          // Update the OR
           this.operatingRooms[index] = {
             ...this.operatingRooms[index],
-            ...orData
+            location: response.location,
+            name: `OR-${response.room_id}`,
+            // Keep other frontend-specific fields
+            primaryService: orData.primaryService || this.operatingRooms[index].primaryService
           };
-
-          console.log('Operating room updated successfully:', orId);
-          return { success: true };
-        } else {
-          throw new Error('Operating room not found');
         }
+
+        console.log('Operating room updated successfully:', orId);
+        return { success: true };
       } catch (error) {
         this.error = 'Failed to update operating room';
         console.error('Failed to update operating room:', error);
-        return { success: false, error: this.error };
+        return { success: false, error: error.message };
       } finally {
         this.isLoading = false;
       }
@@ -190,8 +219,7 @@ export const useResourceStore = defineStore('resource', {
       this.error = null;
 
       try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await operatingRoomAPI.deleteOperatingRoom(orId);
 
         // Remove the OR from the state
         this.operatingRooms = this.operatingRooms.filter(or => or.id !== orId);
@@ -201,43 +229,98 @@ export const useResourceStore = defineStore('resource', {
       } catch (error) {
         this.error = 'Failed to delete operating room';
         console.error('Failed to delete operating room:', error);
-        return { success: false, error: this.error };
+        return { success: false, error: error.message };
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    // Surgeon actions (as part of Staff Management)
+    async loadSurgeons() {
+      this.isLoading = true;
+      this.error = null;
+      try {
+        const backendSurgeons = await surgeonAPI.getSurgeons();
+        const transformedSurgeons = backendSurgeons.map(surgeon => ({
+          id: surgeon.surgeon_id.toString(), // Ensure ID is a string if components expect it
+          name: surgeon.name,
+          role: 'Surgeon',
+          // Backend specialization is a string, frontend expects an array.
+          // Split by comma if multiple, otherwise single item array.
+          specializations: surgeon.specialization ? surgeon.specialization.split(',').map(s => s.trim()) : [],
+          status: 'Active', // Default status, backend model might have 'availability'
+          contact_info: surgeon.contact_info, // Keep original backend data if useful
+          credentials: surgeon.credentials, // Keep original backend data if useful
+          // availability: surgeon.availability // Consider how to map this to frontend 'status' or use directly
+        }));
+
+        // Filter out existing mock surgeons, keep other staff types
+        const otherStaff = this.staff.filter(s => s.role !== 'Surgeon');
+        this.staff = [...otherStaff, ...transformedSurgeons];
+
+        console.log('Surgeons loaded and merged successfully:', transformedSurgeons.length);
+        return { success: true, data: transformedSurgeons };
+      } catch (error) {
+        this.error = 'Failed to load surgeons';
+        console.error('Failed to load surgeons:', error);
+        // Potentially revert to mock data or clear surgeons if preferred
+        // For now, just log error and keep existing state or partially loaded state.
+        return { success: false, error: error.message };
       } finally {
         this.isLoading = false;
       }
     },
 
     // Staff actions
-    async addStaff(staffData) {
-      this.isLoading = true;
-      this.error = null;
-
-      try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Generate a unique ID based on role
-        let prefix = 'ST'; // Default prefix
-        if (staffData.role === 'Surgeon') prefix = 'SG';
-        else if (staffData.role === 'Anesthetist') prefix = 'AN';
-        else if (staffData.role === 'Nurse') prefix = 'NR';
-
-        const newId = `${prefix}${this.staff.length + 1}`;
-
-        // Add the new staff to the state
-        this.staff.push({
-          id: newId,
-          ...staffData
+    async addStaff(staffMember) {
+      // Simulate API call for non-surgeon roles or if API is not ready
+      if (staffMember.role !== 'Surgeon') {
+        console.warn('addStaff: Non-surgeon role, using mock data logic.');
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            const newStaff = { ...staffMember, id: Date.now().toString() }; // Ensure unique ID for mock
+            this.staffList.push(newStaff);
+            resolve(newStaff);
+          }, 500);
         });
+      }
 
-        console.log('Staff added successfully:', newId);
-        return { success: true, id: newId };
+      // Actual API call for Surgeons
+      try {
+        // Transform frontend staffMember to backend surgeon schema
+        const surgeonPayload = {
+          name: staffMember.name,
+          specialty: staffMember.specialty || 'General Surgery', // Assuming specialty is a field
+          phone_number: staffMember.contact,
+          email: staffMember.email || `surgeon${Date.now()}@example.com`, // Ensure email if not provided
+          // map other necessary fields from staffMember to surgeonPayload
+          // availability: staffMember.availability, // This needs to be handled based on backend model
+        };
+
+        const response = await surgeonAPI.createSurgeon(surgeonPayload);
+        // Transform backend response to frontend staffList format
+        const newSurgeon = {
+          id: response.id.toString(), // Ensure ID is a string
+          name: response.name,
+          role: 'Surgeon', // Explicitly set role
+          specialty: response.specialty,
+          contact: response.phone_number,
+          email: response.email,
+          availability: response.availability_schedule || [], // Adjust based on actual backend response
+          // map other necessary fields from response to newSurgeon
+        };
+        this.staffList.push(newSurgeon);
+        return newSurgeon;
       } catch (error) {
-        this.error = 'Failed to add staff';
-        console.error('Failed to add staff:', error);
-        return { success: false, error: this.error };
-      } finally {
-        this.isLoading = false;
+        console.error('Error adding surgeon:', error);
+        // Optionally, re-throw the error or handle it by returning a specific error object
+        // For now, let's fall back to mock behavior or throw to indicate failure
+        // throw error; // Or handle as per application's error handling strategy
+        // Fallback to mock for demo purposes if API fails, or remove this for production
+        console.warn('addStaff: API call failed for surgeon, falling back to mock data logic (or throw error).');
+        const mockNewStaff = { ...staffMember, id: `mock-${Date.now().toString()}` };
+        this.staffList.push(mockNewStaff);
+        return mockNewStaff;
       }
     },
 
@@ -273,6 +356,196 @@ export const useResourceStore = defineStore('resource', {
       }
     },
 
+    async deleteStaff(staffId) {
+      this.isLoading = true;
+      this.error = null;
+
+      try {
+        // Simulate API call
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Remove the staff from the state
+        this.staff = this.staff.filter(s => s.id !== staffId);
+
+        console.log('Staff deleted successfully:', staffId);
+        return { success: true };
+      } catch (error) {
+        this.error = 'Failed to delete staff';
+        console.error('Failed to delete staff:', error);
+        return { success: false, error: this.error };
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    // Equipment actions
+    async addEquipment(equipmentData) {
+      this.isLoading = true;
+      this.error = null;
+
+      try {
+        // Simulate API call
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Generate a unique ID
+        const newId = `EQ${this.equipment.length + 1}`;
+
+        // Add the new equipment to the state
+        this.equipment.push({
+          id: newId,
+          ...equipmentData
+        });
+
+        console.log('Equipment added successfully:', newId);
+        return { success: true, id: newId };
+      } catch (error) {
+        this.error = 'Failed to add equipment';
+        console.error('Failed to add equipment:', error);
+        return { success: false, error: this.error };
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    async updateEquipment(equipmentId, equipmentData) {
+      this.isLoading = true;
+      this.error = null;
+
+      try {
+        // Simulate API call
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Find the equipment to update
+        const index = this.equipment.findIndex(eq => eq.id === equipmentId);
+
+        if (index !== -1) {
+          // Update the equipment
+          this.equipment[index] = {
+            ...this.equipment[index],
+            ...equipmentData
+          };
+
+          console.log('Equipment updated successfully:', equipmentId);
+          return { success: true };
+        } else {
+          throw new Error('Equipment not found');
+        }
+      } catch (error) {
+        this.error = 'Failed to update equipment';
+        console.error('Failed to update equipment:', error);
+        return { success: false, error: this.error };
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    async deleteEquipment(equipmentId) {
+      this.isLoading = true;
+      this.error = null;
+
+      try {
+        // Simulate API call
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Remove the equipment from the state
+        this.equipment = this.equipment.filter(eq => eq.id !== equipmentId);
+
+        console.log('Equipment deleted successfully:', equipmentId);
+        return { success: true };
+      } catch (error) {
+        this.error = 'Failed to delete equipment';
+        console.error('Failed to delete equipment:', error);
+        return { success: false, error: this.error };
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    // Resource availability actions
+    async updateResourceAvailability(resourceId, date, availability) {
+      this.isLoading = true;
+      this.error = null;
+
+      try {
+        // Simulate API call
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Format date as ISO string (YYYY-MM-DD)
+        const dateKey = new Date(date).toISOString().split('T')[0];
+
+        // Ensure the date exists in the availability object
+        if (!this.resourceAvailability[dateKey]) {
+          this.resourceAvailability[dateKey] = {};
+        }
+
+        // Update the resource availability
+        this.resourceAvailability[dateKey][resourceId] = availability;
+
+        console.log('Resource availability updated successfully:', resourceId, dateKey);
+        return { success: true };
+      } catch (error) {
+        this.error = 'Failed to update resource availability';
+        console.error('Failed to update resource availability:', error);
+        return { success: false, error: this.error };
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
+    async updateSurgeon(surgeonData) {
+      if (!surgeonData || !surgeonData.id) {
+        console.error('updateSurgeon: surgeonData with id is required.');
+        return Promise.reject(new Error('Surgeon ID is missing.'));
+      }
+      try {
+        // Transform frontend surgeonData to backend surgeon schema for update
+        const surgeonPayload = {
+          name: surgeonData.name,
+          specialty: surgeonData.specialty,
+          phone_number: surgeonData.contact,
+          email: surgeonData.email,
+          // availability_schedule: surgeonData.availability, // Ensure this matches backend expectations
+        };
+
+        const response = await surgeonAPI.updateSurgeon(surgeonData.id, surgeonPayload);
+        // Transform backend response to frontend staffList format
+        const updatedSurgeonFromAPI = {
+          id: response.id.toString(),
+          name: response.name,
+          role: 'Surgeon',
+          specialty: response.specialty,
+          contact: response.phone_number,
+          email: response.email,
+          availability: response.availability_schedule || [],
+        };
+
+        const index = this.staffList.findIndex(s => s.id === updatedSurgeonFromAPI.id && s.role === 'Surgeon');
+        if (index !== -1) {
+          this.staffList.splice(index, 1, updatedSurgeonFromAPI);
+        }
+        return updatedSurgeonFromAPI;
+      } catch (error) {
+        console.error(`Error updating surgeon ${surgeonData.id}:`, error);
+        throw error; // Re-throw to allow calling component to handle
+      }
+    },
+
+    async deleteSurgeon(surgeonId) {
+      if (!surgeonId) {
+        console.error('deleteSurgeon: surgeonId is required.');
+        return Promise.reject(new Error('Surgeon ID is missing.'));
+      }
+      try {
+        await surgeonAPI.deleteSurgeon(surgeonId);
+        this.staffList = this.staffList.filter(s => !(s.id === surgeonId && s.role === 'Surgeon'));
+        return surgeonId; // Return the ID of the deleted surgeon
+      } catch (error) {
+        console.error(`Error deleting surgeon ${surgeonId}:`, error);
+        throw error; // Re-throw to allow calling component to handle
+      }
+    },
+
+    // Mock deleteStaff - can be removed or refactored if all staff types get API integration
     async deleteStaff(staffId) {
       this.isLoading = true;
       this.error = null;

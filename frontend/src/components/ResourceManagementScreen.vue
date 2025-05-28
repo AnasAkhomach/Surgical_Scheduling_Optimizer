@@ -196,7 +196,8 @@ const { isLoading, error, operatingRooms, staff, equipment } = storeToRefs(resou
 
 // Load resources when component is mounted
 onMounted(async () => {
-  await resourceStore.loadResources();
+  await resourceStore.loadOperatingRooms();
+  // TODO: Add loadStaff() and loadEquipment() when implemented
 });
 
 // --- Resource Availability Calendar State & Logic ---
