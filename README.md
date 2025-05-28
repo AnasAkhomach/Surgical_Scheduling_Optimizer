@@ -57,7 +57,7 @@ This section provides a minimal set of instructions to get the project running q
     npm install
     npm run serve
     ```
-    Access the frontend at `http://localhost:8080`.
+    Access the frontend at `http://localhost:5173`.
 
 ---
 
