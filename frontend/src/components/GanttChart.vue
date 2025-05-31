@@ -1,3 +1,6 @@
+<!--THIS COMPONENT IS FOR BACK UP ONLY-->
+<!--WE SHOULD USE "@infectoone/vue-ganttastic": "^2.3.2"-->
+
 <template>
   <div class="gantt-container">
     <div class="gantt-header">
@@ -198,6 +201,11 @@ import { storeToRefs } from 'pinia';
 import GanttAccessibleTable from './GanttAccessibleTable.vue';
 
 const scheduleStore = useScheduleStore();
+
+onMounted(() => {
+  scheduleStore.loadInitialData(); // Load data when component mounts
+});
+
 // Use storeToRefs to get reactive state and getters from the store
 const {
   visibleScheduledSurgeries,
@@ -439,7 +447,7 @@ const isDragging = (surgery) => {
 
 // Interaction Logic
 const selectSurgery = (surgery) => {
-  scheduleStore.selectSurgery(surgery.id);
+  scheduleStore.selectSurgery(surgery.id); // Corrected: Call action on store instance
 };
 
 // Show tooltip with surgery details
@@ -513,15 +521,15 @@ const calculateSDSTAndConflicts = (surgery, targetORId, proposedStartTime) => {
 
 // Navigation and view controls
 const navigateDateRange = (direction) => {
-  scheduleStore.navigateGanttDate(direction);
+  scheduleStore.navigateGanttDate(direction); // Corrected: Call action on store instance
 };
 
 const changeViewMode = (mode) => {
-  scheduleStore.updateGanttViewMode(mode);
+  scheduleStore.updateGanttViewMode(mode); // Corrected: Call action on store instance
 };
 
 const resetToToday = () => {
-  scheduleStore.resetGanttToToday();
+  scheduleStore.resetGanttToToday(); // Corrected: Call action on store instance
 };
 
 // Drag and Drop Logic
@@ -651,9 +659,9 @@ const onDrop = (event, targetORId) => {
     const isPendingSurgery = scheduleStore.pendingSurgeries.some(p => p.id === surgeryId);
 
     if (isPendingSurgery) {
-      scheduleStore.addSurgeryFromPending(surgeryId, targetORId, newStartTime);
+      scheduleStore.addSurgeryFromPending(surgeryId, targetORId, newStartTime); // Corrected: Call action on store instance
     } else {
-      scheduleStore.rescheduleSurgery(surgeryId, targetORId, newStartTime);
+      scheduleStore.rescheduleSurgery(surgeryId, targetORId, newStartTime); // Corrected: Call action on store instance
     }
   }
 

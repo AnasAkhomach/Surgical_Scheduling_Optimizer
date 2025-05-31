@@ -10,16 +10,7 @@ export const useResourceStore = defineStore('resource', {
     operatingRooms: [],
 
     // Staff
-    staff: [
-      { id: 'SG1', name: 'Dr. Jane Smith', role: 'Surgeon', specializations: ['Cardiac Surgery', 'Vascular Surgery'], status: 'Active' },
-      { id: 'SG2', name: 'Dr. Bill Adams', role: 'Surgeon', specializations: ['Orthopedics', 'Sports Medicine'], status: 'Active' },
-      { id: 'SG3', name: 'Dr. Sarah Chen', role: 'Surgeon', specializations: ['General Surgery'], status: 'Active' },
-      { id: 'SG4', name: 'Dr. Michael Wong', role: 'Surgeon', specializations: ['Ophthalmology'], status: 'Active' },
-      { id: 'AN1', name: 'Dr. Emily Carter', role: 'Anesthetist', specializations: [], status: 'Active' },
-      { id: 'AN2', name: 'Dr. Robert Johnson', role: 'Anesthetist', specializations: [], status: 'On Leave' },
-      { id: 'NR1', name: 'Nurse John Doe', role: 'Scrub Nurse', specializations: ['General Surgery'], status: 'Active' },
-      { id: 'NR2', name: 'Nurse Maria Garcia', role: 'Circulating Nurse', specializations: ['Cardiac Surgery'], status: 'Active' },
-    ],
+    staff: [],
 
     // Equipment
     equipment: [
@@ -272,55 +263,38 @@ export const useResourceStore = defineStore('resource', {
     },
 
     // Staff actions
-    async addStaff(staffMember) {
-      // Simulate API call for non-surgeon roles or if API is not ready
-      if (staffMember.role !== 'Surgeon') {
-        console.warn('addStaff: Non-surgeon role, using mock data logic.');
-        return new Promise((resolve) => {
-          setTimeout(() => {
-            const newStaff = { ...staffMember, id: Date.now().toString() }; // Ensure unique ID for mock
-            this.staffList.push(newStaff);
-            resolve(newStaff);
-          }, 500);
-        });
-      }
+    async addStaff(staffData) {
+      this.isLoading = true;
+      this.error = null;
 
-      // Actual API call for Surgeons
       try {
-        // Transform frontend staffMember to backend surgeon schema
-        const surgeonPayload = {
-          name: staffMember.name,
-          specialty: staffMember.specialty || 'General Surgery', // Assuming specialty is a field
-          phone_number: staffMember.contact,
-          email: staffMember.email || `surgeon${Date.now()}@example.com`, // Ensure email if not provided
-          // map other necessary fields from staffMember to surgeonPayload
-          // availability: staffMember.availability, // This needs to be handled based on backend model
+        const payload = {
+          name: staffData.name,
+          role: staffData.role,
+          specializations: staffData.specializations || [],
+          status: staffData.status || 'Active'
         };
 
-        const response = await surgeonAPI.createSurgeon(surgeonPayload);
-        // Transform backend response to frontend staffList format
-        const newSurgeon = {
-          id: response.id.toString(), // Ensure ID is a string
+        const response = await staffAPI.createStaff(payload);
+
+        const newStaff = {
+          id: response.staff_id,
           name: response.name,
-          role: 'Surgeon', // Explicitly set role
-          specialty: response.specialty,
-          contact: response.phone_number,
-          email: response.email,
-          availability: response.availability_schedule || [], // Adjust based on actual backend response
-          // map other necessary fields from response to newSurgeon
+          role: response.role,
+          specializations: response.specializations || [],
+          status: response.status || 'Active'
         };
-        this.staffList.push(newSurgeon);
-        return newSurgeon;
+
+        this.staff.push(newStaff);
+
+        console.log('Staff added successfully:', response.staff_id);
+        return { success: true, data: newStaff };
       } catch (error) {
-        console.error('Error adding surgeon:', error);
-        // Optionally, re-throw the error or handle it by returning a specific error object
-        // For now, let's fall back to mock behavior or throw to indicate failure
-        // throw error; // Or handle as per application's error handling strategy
-        // Fallback to mock for demo purposes if API fails, or remove this for production
-        console.warn('addStaff: API call failed for surgeon, falling back to mock data logic (or throw error).');
-        const mockNewStaff = { ...staffMember, id: `mock-${Date.now().toString()}` };
-        this.staffList.push(mockNewStaff);
-        return mockNewStaff;
+        this.error = 'Failed to add staff';
+        console.error('Failed to add staff:', error);
+        return { success: false, error: error.message };
+      } finally {
+        this.isLoading = false;
       }
     },
 
@@ -329,28 +303,32 @@ export const useResourceStore = defineStore('resource', {
       this.error = null;
 
       try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 500));
+        const payload = {
+          name: staffData.name,
+          role: staffData.role,
+          specializations: staffData.specializations || [],
+          status: staffData.status
+        };
 
-        // Find the staff to update
+        const response = await staffAPI.updateStaff(staffId, payload);
+
         const index = this.staff.findIndex(s => s.id === staffId);
-
         if (index !== -1) {
-          // Update the staff
           this.staff[index] = {
             ...this.staff[index],
-            ...staffData
+            name: response.name,
+            role: response.role,
+            specializations: response.specializations || [],
+            status: response.status
           };
-
-          console.log('Staff updated successfully:', staffId);
-          return { success: true };
-        } else {
-          throw new Error('Staff not found');
         }
+
+        console.log('Staff updated successfully:', response.staff_id);
+        return { success: true, data: this.staff[index] };
       } catch (error) {
         this.error = 'Failed to update staff';
         console.error('Failed to update staff:', error);
-        return { success: false, error: this.error };
+        return { success: false, error: error.message };
       } finally {
         this.isLoading = false;
       }
@@ -361,10 +339,8 @@ export const useResourceStore = defineStore('resource', {
       this.error = null;
 
       try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await staffAPI.deleteStaff(staffId);
 
-        // Remove the staff from the state
         this.staff = this.staff.filter(s => s.id !== staffId);
 
         console.log('Staff deleted successfully:', staffId);
@@ -372,7 +348,7 @@ export const useResourceStore = defineStore('resource', {
       } catch (error) {
         this.error = 'Failed to delete staff';
         console.error('Failed to delete staff:', error);
-        return { success: false, error: this.error };
+        return { success: false, error: error.message };
       } finally {
         this.isLoading = false;
       }
@@ -492,191 +468,28 @@ export const useResourceStore = defineStore('resource', {
       }
     },
 
-    async updateSurgeon(surgeonData) {
-      if (!surgeonData || !surgeonData.id) {
-        console.error('updateSurgeon: surgeonData with id is required.');
-        return Promise.reject(new Error('Surgeon ID is missing.'));
-      }
-      try {
-        // Transform frontend surgeonData to backend surgeon schema for update
-        const surgeonPayload = {
-          name: surgeonData.name,
-          specialty: surgeonData.specialty,
-          phone_number: surgeonData.contact,
-          email: surgeonData.email,
-          // availability_schedule: surgeonData.availability, // Ensure this matches backend expectations
-        };
-
-        const response = await surgeonAPI.updateSurgeon(surgeonData.id, surgeonPayload);
-        // Transform backend response to frontend staffList format
-        const updatedSurgeonFromAPI = {
-          id: response.id.toString(),
-          name: response.name,
-          role: 'Surgeon',
-          specialty: response.specialty,
-          contact: response.phone_number,
-          email: response.email,
-          availability: response.availability_schedule || [],
-        };
-
-        const index = this.staffList.findIndex(s => s.id === updatedSurgeonFromAPI.id && s.role === 'Surgeon');
-        if (index !== -1) {
-          this.staffList.splice(index, 1, updatedSurgeonFromAPI);
-        }
-        return updatedSurgeonFromAPI;
-      } catch (error) {
-        console.error(`Error updating surgeon ${surgeonData.id}:`, error);
-        throw error; // Re-throw to allow calling component to handle
-      }
-    },
-
-    async deleteSurgeon(surgeonId) {
-      if (!surgeonId) {
-        console.error('deleteSurgeon: surgeonId is required.');
-        return Promise.reject(new Error('Surgeon ID is missing.'));
-      }
-      try {
-        await surgeonAPI.deleteSurgeon(surgeonId);
-        this.staffList = this.staffList.filter(s => !(s.id === surgeonId && s.role === 'Surgeon'));
-        return surgeonId; // Return the ID of the deleted surgeon
-      } catch (error) {
-        console.error(`Error deleting surgeon ${surgeonId}:`, error);
-        throw error; // Re-throw to allow calling component to handle
-      }
-    },
-
-    // Mock deleteStaff - can be removed or refactored if all staff types get API integration
-    async deleteStaff(staffId) {
+    // Load staff (surgeons) from API
+    async loadStaff() {
       this.isLoading = true;
       this.error = null;
 
       try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 500));
+        const response = await staffAPI.getStaff();
 
-        // Remove the staff from the state
-        this.staff = this.staff.filter(s => s.id !== staffId);
+        this.staff = response.map(s => ({
+          id: s.staff_id,
+          name: s.name,
+          role: s.role,
+          specializations: s.specializations || [],
+          status: s.status || 'Active' // Default status
+        }));
 
-        console.log('Staff deleted successfully:', staffId);
+        console.log('Staff loaded successfully:', this.staff.length);
         return { success: true };
       } catch (error) {
-        this.error = 'Failed to delete staff';
-        console.error('Failed to delete staff:', error);
-        return { success: false, error: this.error };
-      } finally {
-        this.isLoading = false;
-      }
-    },
-
-    // Equipment actions
-    async addEquipment(equipmentData) {
-      this.isLoading = true;
-      this.error = null;
-
-      try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Generate a unique ID
-        const newId = `EQ${this.equipment.length + 1}`;
-
-        // Add the new equipment to the state
-        this.equipment.push({
-          id: newId,
-          ...equipmentData
-        });
-
-        console.log('Equipment added successfully:', newId);
-        return { success: true, id: newId };
-      } catch (error) {
-        this.error = 'Failed to add equipment';
-        console.error('Failed to add equipment:', error);
-        return { success: false, error: this.error };
-      } finally {
-        this.isLoading = false;
-      }
-    },
-
-    async updateEquipment(equipmentId, equipmentData) {
-      this.isLoading = true;
-      this.error = null;
-
-      try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Find the equipment to update
-        const index = this.equipment.findIndex(eq => eq.id === equipmentId);
-
-        if (index !== -1) {
-          // Update the equipment
-          this.equipment[index] = {
-            ...this.equipment[index],
-            ...equipmentData
-          };
-
-          console.log('Equipment updated successfully:', equipmentId);
-          return { success: true };
-        } else {
-          throw new Error('Equipment not found');
-        }
-      } catch (error) {
-        this.error = 'Failed to update equipment';
-        console.error('Failed to update equipment:', error);
-        return { success: false, error: this.error };
-      } finally {
-        this.isLoading = false;
-      }
-    },
-
-    async deleteEquipment(equipmentId) {
-      this.isLoading = true;
-      this.error = null;
-
-      try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Remove the equipment from the state
-        this.equipment = this.equipment.filter(eq => eq.id !== equipmentId);
-
-        console.log('Equipment deleted successfully:', equipmentId);
-        return { success: true };
-      } catch (error) {
-        this.error = 'Failed to delete equipment';
-        console.error('Failed to delete equipment:', error);
-        return { success: false, error: this.error };
-      } finally {
-        this.isLoading = false;
-      }
-    },
-
-    // Resource availability actions
-    async updateResourceAvailability(resourceId, date, availability) {
-      this.isLoading = true;
-      this.error = null;
-
-      try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Format date as ISO string (YYYY-MM-DD)
-        const dateKey = new Date(date).toISOString().split('T')[0];
-
-        // Ensure the date exists in the availability object
-        if (!this.resourceAvailability[dateKey]) {
-          this.resourceAvailability[dateKey] = {};
-        }
-
-        // Update the resource availability
-        this.resourceAvailability[dateKey][resourceId] = availability;
-
-        console.log('Resource availability updated successfully:', resourceId, dateKey);
-        return { success: true };
-      } catch (error) {
-        this.error = 'Failed to update resource availability';
-        console.error('Failed to update resource availability:', error);
-        return { success: false, error: this.error };
+        this.error = 'Failed to load staff';
+        console.error('Failed to load staff:', error);
+        return { success: false, error: error.message };
       } finally {
         this.isLoading = false;
       }

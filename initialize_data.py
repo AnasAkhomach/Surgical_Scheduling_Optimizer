@@ -208,13 +208,13 @@ def initialize_surgeries_sqlalchemy():
 
     # Define surgeries with surgery_type_id instead of surgery_type
     return [
-        Surgery( # surgery_id will be auto-generated
+        Surgery(
             patient_id=1,
             surgeon_id=1,
             surgery_type_id=surgery_type_map.get("Appendectomy", 1),
-            scheduled_date=datetime(2024, 7, 1, 8, 0, 0),
-            start_time=datetime(2024, 7, 1, 8, 0, 0),
-            end_time=datetime(2024, 7, 1, 10, 0, 0),
+            scheduled_date=datetime.now().replace(hour=8, minute=0, second=0, microsecond=0),
+            start_time=datetime.now().replace(hour=8, minute=0, second=0, microsecond=0),
+            end_time=datetime.now().replace(hour=10, minute=0, second=0, microsecond=0),
             duration_minutes=120,
             status="Scheduled",
             urgency_level="High"
@@ -223,9 +223,9 @@ def initialize_surgeries_sqlalchemy():
             patient_id=2,
             surgeon_id=2,
             surgery_type_id=surgery_type_map.get("Knee Replacement", 2),
-            scheduled_date=datetime(2024, 7, 1, 10, 30, 0),
-            start_time=datetime(2024, 7, 1, 10, 30, 0),
-            end_time=datetime(2024, 7, 1, 13, 0, 0),
+            scheduled_date=datetime.now().replace(hour=10, minute=30, second=0, microsecond=0),
+            start_time=datetime.now().replace(hour=10, minute=30, second=0, microsecond=0),
+            end_time=datetime.now().replace(hour=13, minute=0, second=0, microsecond=0),
             duration_minutes=150,
             status="Scheduled",
             urgency_level="Medium"
@@ -234,9 +234,9 @@ def initialize_surgeries_sqlalchemy():
             patient_id=3,
             surgeon_id=3,
             surgery_type_id=surgery_type_map.get("Craniotomy", 3),
-            scheduled_date=datetime(2024, 7, 2, 9, 0, 0),
-            start_time=datetime(2024, 7, 2, 9, 0, 0),
-            end_time=datetime(2024, 7, 2, 14, 0, 0),
+            scheduled_date=datetime.now().replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=1),
+            start_time=datetime.now().replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=1),
+            end_time=datetime.now().replace(hour=14, minute=0, second=0, microsecond=0) + timedelta(days=1),
             duration_minutes=300,
             status="Scheduled",
             urgency_level="High"
@@ -245,9 +245,9 @@ def initialize_surgeries_sqlalchemy():
             patient_id=1,
             surgeon_id=1,
             surgery_type_id=surgery_type_map.get("Coronary Bypass", 4),
-            scheduled_date=datetime(2024, 7, 3, 8, 0, 0),
-            start_time=datetime(2024, 7, 3, 8, 0, 0),
-            end_time=datetime(2024, 7, 3, 12, 0, 0),
+            scheduled_date=datetime.now().replace(hour=8, minute=0, second=0, microsecond=0) + timedelta(days=2),
+            start_time=datetime.now().replace(hour=8, minute=0, second=0, microsecond=0) + timedelta(days=2),
+            end_time=datetime.now().replace(hour=12, minute=0, second=0, microsecond=0) + timedelta(days=2),
             duration_minutes=240,
             status="Scheduled",
             urgency_level="High"
@@ -256,15 +256,69 @@ def initialize_surgeries_sqlalchemy():
             patient_id=2,
             surgeon_id=2,
             surgery_type_id=surgery_type_map.get("Hip Arthroscopy", 5),
-            scheduled_date=datetime(2024, 7, 4, 13, 0, 0),
-            start_time=datetime(2024, 7, 4, 13, 0, 0),
-            end_time=datetime(2024, 7, 4, 15, 0, 0),
+            scheduled_date=datetime.now().replace(hour=13, minute=0, second=0, microsecond=0) + timedelta(days=3),
+            start_time=datetime.now().replace(hour=13, minute=0, second=0, microsecond=0) + timedelta(days=3),
+            end_time=datetime.now().replace(hour=15, minute=0, second=0, microsecond=0) + timedelta(days=3),
             duration_minutes=120,
             status="Scheduled",
             urgency_level="Low"
         ),
+        Surgery(
+            patient_id=3,
+            surgeon_id=1,
+            surgery_type_id=surgery_type_map.get("Appendectomy", 1),
+            scheduled_date=datetime.now().replace(hour=9, minute=0, second=0, microsecond=0),
+            start_time=datetime.now().replace(hour=9, minute=0, second=0, microsecond=0),
+            end_time=datetime.now().replace(hour=11, minute=0, second=0, microsecond=0),
+            duration_minutes=120,
+            status="Scheduled",
+            urgency_level="Medium"
+        ),
+        Surgery(
+            patient_id=1,
+            surgeon_id=2,
+            surgery_type_id=surgery_type_map.get("Knee Replacement", 2),
+            scheduled_date=datetime.now().replace(hour=14, minute=0, second=0, microsecond=0),
+            start_time=datetime.now().replace(hour=14, minute=0, second=0, microsecond=0),
+            end_time=datetime.now().replace(hour=16, minute=30, second=0, microsecond=0),
+            duration_minutes=150,
+            status="Scheduled",
+            urgency_level="High"
+        ),
+        Surgery(
+            patient_id=2,
+            surgeon_id=3,
+            surgery_type_id=surgery_type_map.get("Craniotomy", 3),
+            scheduled_date=datetime.now().replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1),
+            start_time=datetime.now().replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1),
+            end_time=datetime.now().replace(hour=15, minute=0, second=0, microsecond=0) + timedelta(days=1),
+            duration_minutes=300,
+            status="Scheduled",
+            urgency_level="Medium"
+        ),
+        Surgery(
+            patient_id=3,
+            surgeon_id=1,
+            surgery_type_id=surgery_type_map.get("Coronary Bypass", 4),
+            scheduled_date=datetime.now().replace(hour=11, minute=0, second=0, microsecond=0) + timedelta(days=2),
+            start_time=datetime.now().replace(hour=11, minute=0, second=0, microsecond=0) + timedelta(days=2),
+            end_time=datetime.now().replace(hour=15, minute=0, second=0, microsecond=0) + timedelta(days=2),
+            duration_minutes=240,
+            status="Scheduled",
+            urgency_level="Low"
+        ),
+        Surgery(
+            patient_id=1,
+            surgeon_id=2,
+            surgery_type_id=surgery_type_map.get("Hip Arthroscopy", 5),
+            scheduled_date=datetime.now().replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=3),
+            start_time=datetime.now().replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=3),
+            end_time=datetime.now().replace(hour=11, minute=0, second=0, microsecond=0) + timedelta(days=3),
+            duration_minutes=120,
+            status="Scheduled",
+            urgency_level="High"
+        ),
     ]
-
 
 
 

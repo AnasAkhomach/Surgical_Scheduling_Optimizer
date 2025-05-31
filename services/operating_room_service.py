@@ -66,3 +66,13 @@ class OperatingRoomService:
             db.rollback()
             print(f"Error deleting operating room: {e}")
             return False
+
+    @staticmethod
+    def get_all_operating_rooms(db, skip: int = 0, limit: int = 100):
+        """Retrieves all operating room records with pagination."""
+        try:
+            operating_rooms = db.query(OperatingRoom).offset(skip).limit(limit).all()
+            return operating_rooms
+        except SQLAlchemyError as e:
+            print(f"Error retrieving all operating rooms: {e}")
+            return []

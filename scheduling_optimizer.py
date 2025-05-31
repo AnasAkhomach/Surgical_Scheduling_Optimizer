@@ -260,10 +260,16 @@ class TabuSearchScheduler:
                             for eq_name, quantity in required_equipment_dict.items():
                                 equipment_db_obj = self.db_session.query(SurgeryEquipment).filter(SurgeryEquipment.name == eq_name).first()
                                 if equipment_db_obj:
+                                    # Use the correct schema fields: usage_start_time and usage_end_time
+                                    # Calculate equipment usage times based on surgery schedule
+                                    surgery_start = assignment.start_time
+                                    surgery_end = assignment.end_time
+
                                     usage_record = SurgeryEquipmentUsage(
                                         surgery_id=surgery_id,
                                         equipment_id=equipment_db_obj.equipment_id,
-                                        quantity=quantity
+                                        usage_start_time=surgery_start,
+                                        usage_end_time=surgery_end
                                     )
                                     self.db_session.add(usage_record)
                                 else:

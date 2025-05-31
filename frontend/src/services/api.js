@@ -3,7 +3,7 @@
 import { getCacheBustingHeaders, addCacheBuster } from '../utils/cacheManager.js';
 
 // Base API configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 /**
  * Generic API request function
@@ -56,9 +56,18 @@ async function apiRequest(endpoint, options = {}) {
       body: config.body instanceof FormData ? 'FormData' : config.body
     });
 
+    // Add performance monitoring
+    const startTime = performance.now();
     const response = await fetch(url, config);
+    const endTime = performance.now();
+    const responseTime = endTime - startTime;
 
-    console.log(`📥 Response: ${response.status} ${response.statusText}`);
+    console.log(`📥 Response: ${response.status} ${response.statusText} (${responseTime.toFixed(2)}ms)`);
+
+    // Performance warning for CRUD operations (should be <200ms)
+    if (responseTime > 200 && !endpoint.includes('/optimize')) {
+      console.warn(`⚠️ Slow API response: ${endpoint} took ${responseTime.toFixed(2)}ms (>200ms threshold)`);
+    }
 
     // Handle non-JSON responses (like 204 No Content)
     if (response.status === 204) {
@@ -153,11 +162,32 @@ export const surgeryAPI = {
 
 // Schedule API
 export const scheduleAPI = {
-  async getSchedules(params = {}) {
+  async fetchScheduleData(dateRange) {
+    const params = {
+      start_time: dateRange.start.toISOString(),
+      end_time: dateRange.end.toISOString(),
+    };
     const queryString = new URLSearchParams(params).toString();
-    const endpoint = queryString ? `/schedules?${queryString}` : '/schedules';
-    return apiRequest(endpoint);
+    return apiRequest(`/schedules?${queryString}`);
   },
+
+  async fetchOperatingRooms() {
+    return apiRequest('/operating-rooms');
+  },
+
+  async fetchStaff() {
+    return apiRequest('/staff');
+  },
+
+  async fetchEquipment() {
+    return apiRequest('/equipment');
+  },
+
+  async fetchSurgeryTypes() {
+    return apiRequest('/surgery-types');
+  },
+
+  // Note: fetchSDSRules and fetchInitialSetupTimes are implemented below with correct endpoints
 
   async optimizeSchedule(optimizationData) {
     return apiRequest('/schedules/optimize', {
@@ -166,8 +196,33 @@ export const scheduleAPI = {
     });
   },
 
-  async getOptimizationStatus(taskId) {
-    return apiRequest(`/schedules/optimization-status/${taskId}`);
+  async getOptimizationStatus(optimizationId) {
+    return apiRequest(`/schedules/optimize/progress/${optimizationId}`);
+  },
+
+  async applySchedule(scheduleData) {
+    return apiRequest('/schedules/apply', {
+      method: 'POST',
+      body: JSON.stringify(scheduleData),
+    });
+  },
+
+  async fetchSDSRules() {
+    // Use the matrix endpoint to get SDST data
+    const response = await apiRequest('/sdst/matrix');
+    return response.matrix || {};
+  },
+
+  async fetchInitialSetupTimes() {
+    // For now, return empty object as initial setup times are part of SDST matrix
+    // This can be enhanced later with a dedicated endpoint
+    return {};
+  },
+
+  async getCurrentSchedule(date = null) {
+    const params = date ? { date } : {};
+    const queryString = new URLSearchParams(params).toString();
+    return apiRequest(`/current${queryString ? '?' + queryString : ''}`);
   },
 };
 
@@ -298,11 +353,11 @@ export const staffAPI = {
 // SDST API
 export const sdstAPI = {
   async getSDSTData() {
-    return apiRequest('/sdst');
+    return apiRequest('/sdst/matrix');
   },
 
   async updateSDSTData(sdstData) {
-    return apiRequest('/sdst', {
+    return apiRequest('/sdst/matrix', {
       method: 'PUT',
       body: JSON.stringify(sdstData),
     });

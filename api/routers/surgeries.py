@@ -11,8 +11,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from db_config import get_db
+# Assuming 'models' here refers to the SQLAlchemy models in the root 'models.py' or 'db_config/models.py'
 from models import Surgery, SurgeryType, Surgeon, Patient, OperatingRoom, User
-from api.models import SurgeryCreate, Surgery as SurgeryResponse, SurgeryUpdate
+from api.models import SurgeryCreate, Surgery as SurgeryResponse, SurgeryUpdate, SurgeryReschedule # Added SurgeryReschedule
 from api.auth import get_current_active_user
 
 router = APIRouter()
@@ -245,3 +246,65 @@ async def delete_surgery(
     db.delete(db_surgery)
     db.commit()
     return None
+
+
+@router.put("/{surgery_id}/reschedule", response_model=SurgeryResponse)
+async def reschedule_surgery(
+    surgery_id: int,
+    reschedule_data: SurgeryReschedule, # Use the new Pydantic model
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Reschedule a surgery to a new operating room and/or time.
+
+    Args:
+        surgery_id: The ID of the surgery to reschedule.
+        reschedule_data: The new OR ID, start time, and end time.
+        db: Database session.
+        current_user: Current authenticated user.
+
+    Returns:
+        Surgery: The updated surgery details.
+
+    Raises:
+        HTTPException: If the surgery, new OR is not found, or if there's an update error.
+    """
+    db_surgery = db.query(Surgery).filter(Surgery.surgery_id == surgery_id).first()
+    if not db_surgery:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Surgery with ID {surgery_id} not found"
+        )
+
+    # Validate the new operating room
+    new_or = db.query(OperatingRoom).filter(OperatingRoom.room_id == reschedule_data.or_id).first()
+    if not new_or:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Operating room with ID {reschedule_data.or_id} not found"
+        )
+
+    # Update surgery fields
+    db_surgery.room_id = reschedule_data.or_id
+    db_surgery.start_time = reschedule_data.start_time
+    db_surgery.end_time = reschedule_data.end_time
+    # Potentially update status if needed, e.g., if it was 'Pending'
+    # db_surgery.status = "Scheduled" # Example
+
+    try:
+        db.commit()
+        db.refresh(db_surgery)
+        return db_surgery
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error rescheduling surgery: {str(e)}"
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {str(e)}"
+        )

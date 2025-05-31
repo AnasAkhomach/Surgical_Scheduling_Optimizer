@@ -5,7 +5,7 @@ from datetime import date, datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), ".")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from services.patient_service import PatientService
 from services.staff_service import StaffService
 from services.surgeon_service import SurgeonService
@@ -158,6 +158,44 @@ def test_operating_room_service(db_session):
     assert deleted is True
     deleted_room = OperatingRoomService.get_operating_room(db_session, room_id)
     assert deleted_room is None
+
+def test_get_all_operating_rooms(db_session):
+    print("\n--- Testing get_all_operating_rooms --- ")
+    # Create multiple operating rooms
+    room_ids = []
+    for i in range(5):
+        room_data = {"location": f"Room {i+1}"}
+        room_id = OperatingRoomService.create_operating_room(db_session, room_data)
+        assert room_id is not None
+        room_ids.append(room_id)
+
+    # Test retrieving all rooms without pagination (default limit)
+    all_rooms = OperatingRoomService.get_all_operating_rooms(db_session)
+    assert len(all_rooms) == 5
+    assert all(isinstance(room, OperatingRoom) for room in all_rooms)
+    print(f"Retrieved all rooms (default limit): {len(all_rooms)}")
+
+    # Test pagination with skip and limit
+    paginated_rooms = OperatingRoomService.get_all_operating_rooms(db_session, skip=1, limit=2)
+    assert len(paginated_rooms) == 2
+    assert paginated_rooms[0].location == "Room 2"
+    assert paginated_rooms[1].location == "Room 3"
+    print(f"Retrieved paginated rooms (skip=1, limit=2): {len(paginated_rooms)}")
+
+    # Test with limit exceeding available rooms
+    more_rooms = OperatingRoomService.get_all_operating_rooms(db_session, limit=10)
+    assert len(more_rooms) == 5
+    print(f"Retrieved rooms with limit=10: {len(more_rooms)}")
+
+    # Test with skip exceeding available rooms
+    empty_rooms = OperatingRoomService.get_all_operating_rooms(db_session, skip=5)
+    assert len(empty_rooms) == 0
+    print(f"Retrieved rooms with skip=5: {len(empty_rooms)}")
+
+    # Clean up (delete created rooms)
+    for room_id in room_ids:
+        deleted = OperatingRoomService.delete_operating_room(db_session, room_id)
+        assert deleted is True
 
 
 def test_surgery_service(db_session):

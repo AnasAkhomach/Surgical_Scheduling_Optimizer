@@ -257,7 +257,7 @@ class SurgeryRoomAssignment(Base):
 class SurgeryType(Base):
     __tablename__ = "surgerytype"
     type_id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(100), nullable=False, unique=True)
+    name = Column(String(100), nullable=False, unique=True, index=True)
     description = Column(Text, nullable=True)
     average_duration = Column(Integer, nullable=False, default=60)
 
@@ -320,7 +320,7 @@ class User(Base):
     __tablename__ = "user"
 
     user_id = Column(Integer, primary_key=True, autoincrement=True)
-    username = Column(String(50), nullable=False, unique=True)
+    username = Column(String(50), nullable=False, unique=True, index=True)
     email = Column(String(100), nullable=False, unique=True)
     hashed_password = Column(String(255), nullable=False)
     full_name = Column(String(100), nullable=True)

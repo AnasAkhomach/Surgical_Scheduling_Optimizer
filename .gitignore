@@ -269,3 +269,4 @@ frontend/node_modules/
 
 # Other ignores from my previous message like logs, build output etc.
 # ...
+.pytest_cache

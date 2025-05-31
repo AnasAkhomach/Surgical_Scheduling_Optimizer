@@ -8,6 +8,15 @@ class OperatingRoomEquipmentService:
     """Provides services for managing operating room equipment."""
 
     @staticmethod
+    def get_equipment(db, skip: int = 0, limit: int = 100):
+        """Retrieves all operating room equipment records."""
+        try:
+            return db.query(OperatingRoomEquipment).offset(skip).limit(limit).all()
+        except SQLAlchemyError as e:
+            print(f"Error fetching all operating room equipment: {e}")
+            return []
+
+    @staticmethod
     def create_operating_room_equipment(db, equipment_data):  # Added db parameter
         """Creates a new operating room equipment record."""
         try:

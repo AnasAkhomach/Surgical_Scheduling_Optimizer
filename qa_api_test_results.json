@@ -1,0 +1,93 @@
+{
+  "success": false,
+  "passed_tests": 6,
+  "total_tests": 7,
+  "success_rate": 85.71428571428571,
+  "status": "GOOD",
+  "detailed_results": [
+    {
+      "test_name": "Authentication",
+      "passed": true,
+      "message": "Token received: eyJhbGciOiJIUzI1NiIs...",
+      "timestamp": "2025-05-29T10:46:39.117512"
+    },
+    {
+      "test_name": "Health Check",
+      "passed": true,
+      "message": "Status: 200, Response: {'status': 'healthy'}",
+      "timestamp": "2025-05-29T10:46:39.120645"
+    },
+    {
+      "test_name": "Current Schedule API",
+      "passed": true,
+      "message": "Retrieved 2 schedule items",
+      "timestamp": "2025-05-29T10:46:39.132549"
+    },
+    {
+      "test_name": "Schedule Data Structure",
+      "passed": true,
+      "message": "All required fields present",
+      "timestamp": "2025-05-29T10:46:39.132805"
+    },
+    {
+      "test_name": "Operating Rooms GET",
+      "passed": true,
+      "message": "Retrieved 80 operating rooms",
+      "timestamp": "2025-05-29T10:46:39.140236"
+    },
+    {
+      "test_name": "OR Data Structure",
+      "passed": true,
+      "message": "All required fields present",
+      "timestamp": "2025-05-29T10:46:39.140438"
+    },
+    {
+      "test_name": "Staff API GET",
+      "passed": true,
+      "message": "Retrieved 31 staff members",
+      "timestamp": "2025-05-29T10:46:39.147568"
+    },
+    {
+      "test_name": "Staff Data Structure",
+      "passed": true,
+      "message": "All required fields present",
+      "timestamp": "2025-05-29T10:46:39.147890"
+    },
+    {
+      "test_name": "SDST Matrix API",
+      "passed": true,
+      "message": "Retrieved SDST data with keys: ['surgery_types', 'setup_times', 'matrix']",
+      "timestamp": "2025-05-29T10:46:39.154095"
+    },
+    {
+      "test_name": "Optimization API",
+      "passed": false,
+      "message": "Status: 500, Response: {\"detail\":\"Optimization failed: (pymysql.err.OperationalError) (1054, \\\"Unknown column 'surgeryequipmentusage.usage_start_time' in 'field list'\\\")\\n[SQL: SELECT surgeryequipmentusage.usage_id AS surgeryequipmentusage_usage_id, surgeryequipmentusage.surgery_id AS surgeryequipmentusage_surgery_id, surgeryequipmentusage.equipment_id AS surgeryequipmentusage_equipment_id, surgeryequipmentusage.usage_start_time AS surgeryequipmentusage_usage_start_time, surgeryequipmentusage.usage_end_time AS surgeryequipmentusage_usage_end_time \\nFROM surgeryequipmentusage \\nWHERE surgeryequipmentusage.surgery_id = %(surgery_id_1)s]\\n[parameters: {'surgery_id_1': 47}]\\n(Background on this error at: https://sqlalche.me/e/20/e3q8)\"}",
+      "timestamp": "2025-05-29T10:46:39.174278"
+    },
+    {
+      "test_name": "Response Time /current",
+      "passed": true,
+      "message": "5.0ms",
+      "timestamp": "2025-05-29T10:46:39.179609"
+    },
+    {
+      "test_name": "Response Time /operating-rooms",
+      "passed": true,
+      "message": "6.1ms",
+      "timestamp": "2025-05-29T10:46:39.185791"
+    },
+    {
+      "test_name": "Response Time /staff",
+      "passed": true,
+      "message": "6.6ms",
+      "timestamp": "2025-05-29T10:46:39.192644"
+    },
+    {
+      "test_name": "Response Time /sdst/matrix",
+      "passed": true,
+      "message": "5.5ms",
+      "timestamp": "2025-05-29T10:46:39.198445"
+    }
+  ]
+}

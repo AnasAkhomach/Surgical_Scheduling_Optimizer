@@ -174,6 +174,68 @@ class OperatingRoomCreate(OperatingRoomBase):
     pass
 
 
+class OperatingRoomEquipmentBase(BaseModel):
+    """Base model for operating room equipment data."""
+    name: str
+    type: str
+    serial_number: Optional[str] = None
+    location: Optional[str] = None
+    status: Optional[str] = None
+
+
+class OperatingRoomEquipmentCreate(OperatingRoomEquipmentBase):
+    """Model for creating operating room equipment."""
+    pass
+
+
+class OperatingRoomEquipment(OperatingRoomEquipmentBase):
+    """Model for operating room equipment with ID."""
+    id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SurgeryCreate(SurgeryBase):
+    pass
+
+
+class SurgeryReschedule(BaseModel):
+    """Model for rescheduling a surgery."""
+    or_id: int = Field(..., description="The ID of the new operating room.")
+    start_time: datetime = Field(..., description="The new start time for the surgery.")
+    end_time: datetime = Field(..., description="The new end time for the surgery.")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SurgeryUpdate(SurgeryBase): # Assuming SurgeryUpdate might exist or be needed
+    """Model for updating an existing surgery's details (excluding reschedule specific fields)."""
+    # Add fields that can be updated generally, excluding or_id, start_time, end_time if they are only for reschedule
+    # For example:
+    surgery_type_id: Optional[int] = None
+    duration_minutes: Optional[int] = None
+    urgency_level: Optional[UrgencyLevel] = None
+    patient_id: Optional[int] = None
+    surgeon_id: Optional[int] = None
+    # room_id: Optional[int] = None # Handled by reschedule
+    # start_time: Optional[datetime] = None # Handled by reschedule
+    # end_time: Optional[datetime] = None # Handled by reschedule
+    status: Optional[SurgeryStatus] = None
+    notes: Optional[str] = None
+    # Ensure this model does not conflict with how updates are handled elsewhere
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Surgery(SurgeryBase):
+    """Model for surgery response, including ID."""
+    surgery_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class SurgeryCreate(SurgeryBase):
     """Model for creating a surgery."""
     pass

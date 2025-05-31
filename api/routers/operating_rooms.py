@@ -13,6 +13,7 @@ from db_config import get_db
 from models import OperatingRoom, User
 from api.models import OperatingRoomCreate, OperatingRoom as OperatingRoomResponse, OperatingRoomUpdate
 from api.auth import get_current_active_user
+from services.operating_room_service import OperatingRoomService
 
 router = APIRouter()
 
@@ -68,7 +69,7 @@ async def read_operating_rooms(
     Returns:
         List[OperatingRoom]: List of operating rooms
     """
-    operating_rooms = db.query(OperatingRoom).offset(skip).limit(limit).all()
+    operating_rooms = OperatingRoomService.get_all_operating_rooms(db, skip=skip, limit=limit)
     return operating_rooms
 
 

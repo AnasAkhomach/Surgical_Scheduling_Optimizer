@@ -1,0 +1,5 @@
+Method,Name,Error,Occurrences
+GET,/api/v1/surgery-types,"ConnectionRefusedError(10061, '[WinError 10061] No connection could be made because the target machine actively refused it.')",42
+GET,/api/v1/operating-rooms,"ConnectionRefusedError(10061, '[WinError 10061] No connection could be made because the target machine actively refused it.')",37
+POST,/api/v1/auth/token,"ConnectionRefusedError(10061, '[WinError 10061] No connection could be made because the target machine actively refused it.')",21
+GET,/api/v1/operating-rooms?skip=0&limit=5,"ConnectionRefusedError(10061, '[WinError 10061] No connection could be made because the target machine actively refused it.')",36

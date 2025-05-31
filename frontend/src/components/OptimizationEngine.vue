@@ -1,7 +1,7 @@
 <template>
   <div class="optimization-engine">
     <h1>Schedule Optimization Engine</h1>
-    
+
     <!-- Optimization Controls -->
     <div class="optimization-controls">
       <div class="control-section">
@@ -9,8 +9,8 @@
         <div class="settings-grid">
           <div class="setting-item">
             <label>
-              <input 
-                type="checkbox" 
+              <input
+                type="checkbox"
                 v-model="optimizationSettings.prioritizeSDST"
                 @change="updateSettings"
               >
@@ -19,8 +19,8 @@
           </div>
           <div class="setting-item">
             <label>
-              <input 
-                type="checkbox" 
+              <input
+                type="checkbox"
                 v-model="optimizationSettings.prioritizeUrgency"
                 @change="updateSettings"
               >
@@ -29,8 +29,8 @@
           </div>
           <div class="setting-item">
             <label>
-              <input 
-                type="checkbox" 
+              <input
+                type="checkbox"
                 v-model="optimizationSettings.prioritizeResourceUtilization"
                 @change="updateSettings"
               >
@@ -39,8 +39,8 @@
           </div>
           <div class="setting-item">
             <label>
-              <input 
-                type="checkbox" 
+              <input
+                type="checkbox"
                 v-model="optimizationSettings.allowMinorDelays"
                 @change="updateSettings"
               >
@@ -48,9 +48,9 @@
             </label>
           </div>
         </div>
-        
+
         <div class="action-buttons">
-          <button 
+          <button
             class="run-optimization-btn"
             @click="runOptimization"
             :disabled="!canOptimize || isOptimizing"
@@ -58,8 +58,8 @@
             <span v-if="isOptimizing" class="spinner"></span>
             {{ isOptimizing ? 'Analyzing Schedule...' : 'Run Optimization' }}
           </button>
-          
-          <button 
+
+          <button
             v-if="optimizationResults"
             class="clear-results-btn"
             @click="clearResults"
@@ -108,7 +108,7 @@
             <button @click="clearAllSelections" class="clear-selection-btn">
               Clear Selection
             </button>
-            <button 
+            <button
               @click="applySelectedSuggestions"
               :disabled="selectedSuggestions.length === 0"
               class="apply-suggestions-btn"
@@ -119,8 +119,8 @@
         </div>
 
         <div class="suggestions-list">
-          <div 
-            v-for="suggestion in currentSuggestions" 
+          <div
+            v-for="suggestion in currentSuggestions"
             :key="suggestion.id"
             class="suggestion-card"
             :class="[
@@ -130,7 +130,7 @@
           >
             <div class="suggestion-header">
               <div class="suggestion-checkbox">
-                <input 
+                <input
                   type="checkbox"
                   :checked="selectedSuggestions.includes(suggestion.id)"
                   @change="toggleSuggestionSelection(suggestion.id)"
@@ -148,10 +148,10 @@
                 </div>
               </div>
             </div>
-            
+
             <div class="suggestion-content">
               <p class="suggestion-description">{{ suggestion.description }}</p>
-              
+
               <div class="suggestion-details">
                 <div class="detail-item">
                   <strong>Estimated Savings:</strong> {{ suggestion.estimatedSavings }}
@@ -206,8 +206,8 @@
     <div v-if="optimizationHistory.length > 0" class="optimization-history">
       <h3>Recent Optimizations</h3>
       <div class="history-list">
-        <div 
-          v-for="entry in optimizationHistory.slice(0, 5)" 
+        <div
+          v-for="entry in optimizationHistory.slice(0, 5)"
           :key="entry.id"
           class="history-item"
           :class="{ 'applied': entry.applied }"
@@ -230,10 +230,10 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { useOptimizationStore } from '@/stores/optimizationStore';
+import { useScheduleStore } from '@/stores/scheduleStore';
 import { storeToRefs } from 'pinia';
 
-const optimizationStore = useOptimizationStore();
+const scheduleStore = useScheduleStore();
 const {
   isOptimizing,
   optimizationResults,
@@ -244,7 +244,7 @@ const {
   potentialSavings,
   optimizationSummary,
   canOptimize
-} = storeToRefs(optimizationStore);
+} = storeToRefs(scheduleStore);
 
 // Local reactive data
 const showAdvancedSettings = ref(false);
@@ -252,7 +252,7 @@ const showAdvancedSettings = ref(false);
 // Methods
 const runOptimization = async () => {
   try {
-    await optimizationStore.runOptimization();
+    await scheduleStore.runOptimization();
   } catch (error) {
     console.error('Optimization failed:', error);
     // Could show a toast notification here
@@ -260,30 +260,30 @@ const runOptimization = async () => {
 };
 
 const clearResults = () => {
-  optimizationStore.clearOptimizationResults();
+  scheduleStore.clearOptimizationResults();
 };
 
 const updateSettings = () => {
-  optimizationStore.updateOptimizationSettings(optimizationSettings.value);
+  scheduleStore.updateOptimizationSettings(optimizationSettings.value);
 };
 
 const toggleSuggestionSelection = (suggestionId) => {
-  optimizationStore.toggleSuggestionSelection(suggestionId);
+  scheduleStore.toggleSuggestionSelection(suggestionId);
 };
 
 const selectAllSuggestions = () => {
-  optimizationStore.selectAllSuggestions();
+  scheduleStore.selectAllSuggestions();
 };
 
 const clearAllSelections = () => {
-  optimizationStore.clearAllSelections();
+  scheduleStore.clearAllSelections();
 };
 
 const applySelectedSuggestions = async () => {
   if (selectedSuggestions.value.length === 0) return;
-  
+
   try {
-    await optimizationStore.applySuggestions([...selectedSuggestions.value]);
+    await scheduleStore.applyOptimizationResults([...selectedSuggestions.value]);
     // Could show success notification
     console.log('Suggestions applied successfully');
   } catch (error) {
@@ -733,20 +733,20 @@ h1 {
     align-items: stretch;
     gap: var(--spacing-md);
   }
-  
+
   .suggestions-actions {
     justify-content: stretch;
   }
-  
+
   .suggestions-actions button {
     flex: 1;
   }
-  
+
   .suggestion-meta {
     flex-direction: column;
     gap: var(--spacing-sm);
   }
-  
+
   .summary-cards {
     grid-template-columns: 1fr;
   }

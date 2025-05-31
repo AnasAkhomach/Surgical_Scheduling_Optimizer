@@ -35,7 +35,8 @@ from api.routers import (
     users,
     surgery_types,
     sdst,
-    websockets
+    websockets,
+    equipment
 )
 
 # Load environment variables
@@ -130,7 +131,8 @@ app.include_router(surgeons.router, prefix="/api/surgeons", tags=["Surgeons"])
 app.include_router(patients.router, prefix="/api/patients", tags=["Patients"])
 app.include_router(staff.router, prefix="/api/staff", tags=["Staff"])
 app.include_router(appointments.router, prefix="/api/appointments", tags=["Appointments"])
-app.include_router(schedules.router, prefix="/api/schedules", tags=["Schedules"])
+app.include_router(schedules.router, prefix="/api", tags=["schedules"])
+app.include_router(equipment.router, prefix="/api", tags=["equipment"])
 app.include_router(surgery_types.router, prefix="/api/surgery-types", tags=["Surgery Types"])
 app.include_router(sdst.router, prefix="/api/sdst", tags=["SDST"])
 app.include_router(websockets.router, prefix="/api/ws", tags=["WebSockets"])

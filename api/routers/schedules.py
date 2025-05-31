@@ -124,8 +124,8 @@ async def optimize_schedule(
     try:
         # Get surgeries to schedule
         query = db.query(Surgery)
-        if params.date:
-            query = query.filter(Surgery.scheduled_date == params.date)
+        if params.schedule_date:
+            query = query.filter(Surgery.scheduled_date == params.schedule_date)
         else:
             # Default to surgeries with status "Scheduled"
             query = query.filter(Surgery.status == "Scheduled")
@@ -310,6 +310,67 @@ async def get_current_schedule(
         ))
 
     return assignments
+
+
+@router.get("/schedules", response_model=List[SurgeryAssignment])
+async def get_schedules_by_time_range(
+    start_time: datetime = Query(..., description="Start time for the schedule query"),
+    end_time: datetime = Query(..., description="End time for the schedule query"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Retrieve surgery schedules within a specified time range.
+
+    Args:
+        start_time: The beginning of the time range.
+        end_time: The end of the time range.
+        db: Database session.
+        current_user: The authenticated user.
+
+    Returns:
+        A list of SurgeryAssignment objects within the specified time range.
+
+    Raises:
+        HTTPException: If no schedules are found or if there's a database error.
+    """
+    try:
+        assignments = db.query(SurgeryRoomAssignment).filter(
+            and_(
+                SurgeryRoomAssignment.start_time >= start_time,
+                SurgeryRoomAssignment.end_time <= end_time
+            )
+        ).all()
+
+        if not assignments:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No schedules found for the specified time range."
+            )
+
+        # Convert to Pydantic model for response
+        response_assignments = []
+        for assignment in assignments:
+            surgery = db.query(Surgery).filter(Surgery.surgery_id == assignment.surgery_id).first()
+            if surgery:
+                response_assignments.append(SurgeryAssignment(
+                    surgery_id=assignment.surgery_id,
+                    room_id=assignment.room_id,
+                    start_time=assignment.start_time,
+                    end_time=assignment.end_time,
+                    surgeon_id=surgery.surgeon_id,
+                    patient_id=surgery.patient_id,
+                    duration_minutes=surgery.duration_minutes,
+                    surgery_type_id=surgery.surgery_type_id
+                ))
+        return response_assignments
+    except Exception as e:
+        logger.error(f"Error fetching schedules by time range: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred while fetching schedules: {e}"
+        )
+
 
 
 # Enhanced Schedule Management Endpoints

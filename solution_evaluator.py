@@ -77,7 +77,7 @@ class SolutionEvaluator:
 
             # Load surgery types
             surgery_types = self.db_session.query(SurgeryType).all()
-            self.surgery_types_cache = {st.surgery_type_id: st for st in surgery_types}
+            self.surgery_types_cache = {st.type_id: st for st in surgery_types}
 
             # Load surgeon preferences
             surgeon_prefs = self.db_session.query(SurgeonPreference).all()
