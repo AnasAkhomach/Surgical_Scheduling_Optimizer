@@ -222,7 +222,7 @@ export const scheduleAPI = {
   async getCurrentSchedule(date = null) {
     const params = date ? { date } : {};
     const queryString = new URLSearchParams(params).toString();
-    return apiRequest(`/current${queryString ? '?' + queryString : ''}`);
+    return apiRequest(`/schedules/current${queryString ? '?' + queryString : ''}`);
   },
 };
 

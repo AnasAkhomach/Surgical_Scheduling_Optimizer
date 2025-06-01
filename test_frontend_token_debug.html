@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frontend Token Debug</title>
+</head>
+<body>
+    <h1>Frontend Token Debug</h1>
+    <div id="output"></div>
+
+    <script>
+        const output = document.getElementById('output');
+
+        function log(message) {
+            console.log(message);
+            output.innerHTML += `<p>${message}</p>`;
+        }
+
+        async function testFrontendAuth() {
+            log('🔍 Testing Frontend Authentication...');
+
+            // Check localStorage
+            const token = localStorage.getItem('authToken');
+            const isAuthenticated = localStorage.getItem('isAuthenticated');
+
+            log(`Token in localStorage: ${token ? token.substring(0, 20) + '...' : 'null'}`);
+            log(`isAuthenticated: ${isAuthenticated}`);
+
+            if (!token) {
+                log('❌ No token found. Attempting login...');
+                await attemptLogin();
+            } else {
+                log('✅ Token found. Testing API call...');
+                await testCurrentEndpoint(token);
+            }
+        }
+
+        async function attemptLogin() {
+            try {
+                const formData = new FormData();
+                formData.append('username', 'admin');
+                formData.append('password', 'admin123');
+                formData.append('grant_type', 'password');
+
+                const response = await fetch('http://localhost:5000/api/auth/token', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const token = data.access_token;
+
+                    localStorage.setItem('authToken', token);
+                    localStorage.setItem('isAuthenticated', 'true');
+
+                    log(`✅ Login successful. Token: ${token.substring(0, 20)}...`);
+                    await testCurrentEndpoint(token);
+                } else {
+                    log(`❌ Login failed: ${response.status} ${response.statusText}`);
+                }
+            } catch (error) {
+                log(`❌ Login error: ${error.message}`);
+            }
+        }
+
+        async function testCurrentEndpoint(token) {
+            try {
+                log('🔍 Testing /current endpoint...');
+
+                const response = await fetch('http://localhost:5000/api/current?date=2023-10-27', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                log(`Response status: ${response.status} ${response.statusText}`);
+
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`✅ Success! Data: ${JSON.stringify(data, null, 2).substring(0, 500)}...`);
+                } else {
+                    const errorText = await response.text();
+                    log(`❌ Failed: ${errorText}`);
+                }
+            } catch (error) {
+                log(`❌ API call error: ${error.message}`);
+            }
+        }
+
+        // Run test when page loads
+        window.addEventListener('load', testFrontendAuth);
+    </script>
+</body>
+</html>

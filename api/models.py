@@ -8,6 +8,7 @@ from datetime import datetime, date
 from typing import Optional, List, Dict, Any
 from enum import Enum
 import uuid
+import json # Added for field_validator
 from pydantic import BaseModel, EmailStr, ConfigDict, Field, field_validator
 
 
@@ -84,13 +85,40 @@ class StaffBase(BaseModel):
     name: str
     role: str
     contact_info: Optional[str] = None
-    specialization: Optional[str] = None
-    availability: bool = True
+    specializations: Optional[List[str]] = Field(default_factory=list) # Changed from specialization (string) to list, added default_factory
+    status: str = Field(default="Active") # Added status, e.g., "Active", "On Leave", "Inactive"
+    availability: bool = True # Kept availability as it's in the original model and StaffResponse
+
+    @field_validator('specializations', mode='before')
+    @classmethod
+    def parse_specializations_from_db(cls, v):
+        if isinstance(v, str):
+            try:
+                loaded_json = json.loads(v)
+                if isinstance(loaded_json, list):
+                    return loaded_json
+                return [] # Or raise ValueError if structure is wrong
+            except json.JSONDecodeError:
+                # This case might occur if the string is not valid JSON.
+                # Depending on requirements, could return empty list, raise error, or attempt other parsing.
+                return [] # Default to empty list on error
+        if v is None: # If DB stores NULL for specializations
+            return []
+        # If it's already a list (e.g. during direct Pydantic model creation/validation, not from DB attribute)
+        if isinstance(v, list):
+            return v
+        # Fallback or error for unexpected types
+        return [] # Or raise TypeError
 
 
 class OperatingRoomBase(BaseModel):
     """Base model for operating room data."""
+    name: str = Field(..., description="Name of the operating room")
     location: str
+    status: str = Field(default="Active", description="e.g., Active, Under Maintenance, Inactive")
+    primary_service: Optional[str] = Field(default=None, alias="primaryService", description="Primary service of the OR")
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
 class SurgeryBase(BaseModel):
@@ -247,7 +275,7 @@ class SurgeryTypeCreate(SurgeryTypeBase):
 
 
 class SequenceDependentSetupTimeCreate(SequenceDependentSetupTimeBase):
-    """Model for creating a sequence-dependent setup time."""
+    """Model for creating sequence-dependent setup time data."""
     pass
 
 
@@ -271,23 +299,52 @@ class Patient(PatientBase):
 
 class Surgeon(SurgeonBase):
     """Model for surgeon response."""
-    surgeon_id: int
+    surgeon_id: int = Field(alias="surgeonId")
+    id: Optional[int] = Field(default=None, alias="id")
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    def model_post_init(self, __context) -> None:
+        """Post-initialization to set computed fields."""
+        # Map surgeon_id to id for frontend compatibility
+        if self.id is None and self.surgeon_id is not None:
+            self.id = self.surgeon_id
 
 
 class Staff(StaffBase):
     """Model for staff response."""
-    staff_id: int
+    staff_id: int = Field(alias="staffId")
+    id: Optional[int] = Field(default=None, alias="id")
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    def model_post_init(self, __context) -> None:
+        """Post-initialization to set computed fields."""
+        # Map staff_id to id for frontend compatibility
+        if self.id is None and self.staff_id is not None:
+            self.id = self.staff_id
 
 
 class OperatingRoom(OperatingRoomBase):
     """Model for operating room response."""
-    room_id: int
+    room_id: int = Field(alias="roomId")
+    id: Optional[int] = Field(default=None, alias="id")
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    def model_post_init(self, __context) -> None:
+        """Post-initialization to set computed fields."""
+        # Map room_id to id for frontend compatibility
+        if self.id is None and self.room_id is not None:
+            self.id = self.room_id
+
+        # Ensure all required fields have default values if missing from database
+        if not self.name:
+            self.name = f"OR {self.room_id or 'Unknown'}"
+        if not self.status:
+            self.status = "Active"
+        if self.primary_service is None:
+            self.primary_service = None
 
 
 class SurgeryType(SurgeryTypeBase):
@@ -307,15 +364,29 @@ class SequenceDependentSetupTime(SequenceDependentSetupTimeBase):
 class Surgery(SurgeryBase):
     """Model for surgery response."""
     surgery_id: int
+    id: Optional[int] = Field(default=None, alias="id")
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    def model_post_init(self, __context) -> None:
+        """Post-initialization to set computed fields."""
+        # Map surgery_id to id for frontend compatibility
+        if self.id is None and self.surgery_id is not None:
+            self.id = self.surgery_id
 
 
 class Appointment(AppointmentBase):
     """Model for appointment response."""
     appointment_id: int
+    id: Optional[int] = Field(default=None, alias="id")
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    def model_post_init(self, __context) -> None:
+        """Post-initialization to set computed fields."""
+        # Map appointment_id to id for frontend compatibility
+        if self.id is None and self.appointment_id is not None:
+            self.id = self.appointment_id
 
 
 class User(UserBase):
@@ -362,13 +433,20 @@ class StaffUpdate(BaseModel):
     name: Optional[str] = None
     role: Optional[str] = None
     contact_info: Optional[str] = None
-    specialization: Optional[str] = None
+    specializations: Optional[List[str]] = None # Changed from specialization
+    status: Optional[str] = None # Added status
     availability: Optional[bool] = None
 
 
 class OperatingRoomUpdate(BaseModel):
     """Model for updating an operating room."""
+    name: Optional[str] = None
     location: Optional[str] = None
+    status: Optional[str] = None
+    primary_service: Optional[str] = Field(None, alias="primaryService")
+
+    class Config:
+        populate_by_name = True  # Allow both field name and alias
 
 
 class SurgeryUpdate(BaseModel):
@@ -444,6 +522,14 @@ class ScheduleAssignment(BaseModel):
     patient_name: Optional[str] = None
     urgency_level: Optional[UrgencyLevel] = None
     status: Optional[SurgeryStatus] = None
+
+
+class CurrentScheduleResponse(BaseModel):
+    """Response model for current schedule endpoint."""
+    surgeries: List[ScheduleAssignment]
+    date: Optional[str] = None
+    total_count: int
+    status: str
 
 
 class SurgeryEnriched(BaseModel):

@@ -17,7 +17,10 @@ from db_config import Base
 class OperatingRoom(Base):
     __tablename__ = "operatingroom"
     room_id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(255), nullable=False) # Added name
     location = Column(String(255), nullable=False)
+    status = Column(String(50), nullable=False, server_default="Active") # Added status
+    primary_service = Column(String(255), nullable=True) # Added primary_service
     surgeries = relationship("Surgery", back_populates="room")
     equipment = relationship("OperatingRoomEquipment", back_populates="room")
 
@@ -40,7 +43,8 @@ class Staff(Base):
     name = Column(String(255), nullable=False)
     role = Column(String(100), nullable=False)
     contact_info = Column(String(255), nullable=True)
-    specialization = Column(String(255), nullable=True)
+    specializations = Column(Text, nullable=True) # Changed from specialization (String) to Text (for JSON list)
+    status = Column(String(50), nullable=False, server_default="Active") # Added status
     availability = Column(Boolean, nullable=False, server_default="1")
     assignments = relationship("SurgeryStaffAssignment", back_populates="staff")
 
@@ -77,7 +81,7 @@ class Surgery(Base):
     # Changed MySQLEnum to GenericEnum with native_enum=False
     urgency_level = Column(
         GenericEnum(
-            "Low", "Medium", "High", name="urgency_level_enum", native_enum=False
+            "Low", "Medium", "High", "Emergency", name="urgency_level_enum", native_enum=False
         ),
         nullable=False,
     )

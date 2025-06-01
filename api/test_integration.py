@@ -10,7 +10,7 @@ import sys
 import pytest
 from datetime import datetime
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, DateTime, ForeignKey
+from sqlalchemy import create_engine, Table, Column, Integer, String, MetaData, DateTime, ForeignKey, Text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from datetime import datetime, date, timedelta
@@ -33,111 +33,9 @@ engine = create_engine(
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Create test tables
-Base.metadata.create_all(bind=engine)
+# Base.metadata.create_all(bind=engine) # This is handled by the db fixture
 
-# Create tables explicitly
-metadata = MetaData()
-
-# Create OperatingRoom table
-operating_room_table = Table(
-    'operatingroom', metadata,
-    Column('room_id', Integer, primary_key=True),
-    Column('location', String(255), nullable=False)
-)
-
-# Create Surgery table
-surgery_table = Table(
-    'surgery', metadata,
-    Column('surgery_id', Integer, primary_key=True),
-    Column('scheduled_date', DateTime),
-    Column('surgery_type_id', Integer),
-    Column('urgency_level', String(50)),
-    Column('duration_minutes', Integer),
-    Column('status', String(50)),
-    Column('start_time', DateTime),
-    Column('end_time', DateTime),
-    Column('patient_id', Integer),
-    Column('surgeon_id', Integer),
-    Column('room_id', Integer, ForeignKey('operatingroom.room_id'))
-)
-
-# Create OperatingRoomEquipment table
-operating_room_equipment_table = Table(
-    'operatingroomequipment', metadata,
-    Column('id', Integer, primary_key=True),
-    Column('room_id', Integer, ForeignKey('operatingroom.room_id')),
-    Column('equipment_name', String(255))
-)
-
-# Create User table
-user_table = Table(
-    'user', metadata,
-    Column('user_id', Integer, primary_key=True),
-    Column('username', String(50), unique=True, nullable=False),
-    Column('email', String(100), unique=True, nullable=False),
-    Column('hashed_password', String(100), nullable=False),
-    Column('full_name', String(100)),
-    Column('role', String(20)),
-    Column('staff_id', Integer),
-    Column('is_active', Integer, default=1),
-    Column('created_at', DateTime, default=datetime.now()),
-    Column('last_login', DateTime)
-)
-
-# Create Patient table
-patient_table = Table(
-    'patient', metadata,
-    Column('patient_id', Integer, primary_key=True),
-    Column('name', String(100), nullable=False),
-    Column('dob', String(10)),
-    Column('contact_info', String(100)),
-    Column('privacy_consent', Integer, default=1)
-)
-
-# Create Surgeon table
-surgeon_table = Table(
-    'surgeon', metadata,
-    Column('surgeon_id', Integer, primary_key=True),
-    Column('name', String(100), nullable=False),
-    Column('contact_info', String(100)),
-    Column('specialization', String(100)),
-    Column('credentials', String(100)),
-    Column('availability', Integer, default=1)
-)
-
-# Create Staff table
-staff_table = Table(
-    'staff', metadata,
-    Column('staff_id', Integer, primary_key=True),
-    Column('name', String(100), nullable=False),
-    Column('role', String(50)),
-    Column('contact_info', String(100)),
-    Column('specialization', String(100)),
-    Column('availability', Integer, default=1)
-)
-
-# Create SurgeryType table
-surgery_type_table = Table(
-    'surgerytype', metadata,
-    Column('type_id', Integer, primary_key=True),
-    Column('name', String(100), nullable=False),
-    Column('description', String(255)),
-    Column('typical_duration', Integer)
-)
-
-# Create SurgeryAppointment table
-appointment_table = Table(
-    'surgeryappointment', metadata,
-    Column('appointment_id', Integer, primary_key=True),
-    Column('patient_id', Integer, ForeignKey('patient.patient_id')),
-    Column('surgeon_id', Integer, ForeignKey('surgeon.surgeon_id')),
-    Column('room_id', Integer, ForeignKey('operatingroom.room_id')),
-    Column('appointment_date', DateTime),
-    Column('status', String(50)),
-    Column('notes', String(255))
-)
-
-metadata.create_all(bind=engine)
+# Manual table definitions removed to rely on SQLAlchemy models via Base.metadata
 
 
 # Mock current user for testing
@@ -217,7 +115,7 @@ def seed_test_data(db):
 
     # Create test operating rooms
     for i in range(1, 4):
-        room = OperatingRoom(location=f"Test Room {i}")
+        room = OperatingRoom(name=f"Test OR {i}", location=f"Test Room {i}", status="Active") # Added name and explicit status
         db.add(room)
 
     # Create test surgeons
@@ -247,7 +145,8 @@ def seed_test_data(db):
             name=f"Staff {i}",
             role=f"Role {i}",
             contact_info=f"staff{i}@example.com",
-            specialization=f"Specialization {i}",
+            specializations=f'["Specialization {i}"]',  # Store as JSON string for SQLAlchemy
+            status="Active", # Explicitly set status
             availability=True
         )
         db.add(staff)
@@ -427,7 +326,7 @@ def test_create_patient_and_appointment(db):
         # Create an operating room
         response = client.post(
             "/api/operating-rooms/",
-            json={"location": "Appointment Test Room"}
+            json={"name": "OR Appointment Test", "location": "Appointment Test Room"} # Added name
         )
         assert response.status_code == 201
         room_data = response.json()
@@ -482,7 +381,7 @@ def test_create_and_delete_staff(db):
                 "name": "Integration Test Staff",
                 "role": "Tester",
                 "contact_info": "staff@example.com",
-                "specialization": "Integration Testing",
+                "specializations": ["Integration Testing"], # Changed to specializations and list
                 "availability": True
             }
         )

@@ -1,0 +1,55 @@
+{
+  "surgeries": [
+    {
+      "surgery_id": 63,
+      "room_id": 116,
+      "room": "OR-1",
+      "surgeon_id": 104,
+      "surgeon": "Dr. Emily Smith",
+      "surgery_type_id": 1,
+      "surgery_type": "Appendectomy",
+      "start_time": "2025-06-01T08:00:00",
+      "end_time": "2025-06-01T10:00:00",
+      "duration_minutes": 120,
+      "patient_id": 107,
+      "patient_name": "John Doe",
+      "urgency_level": "High",
+      "status": "Scheduled"
+    },
+    {
+      "surgery_id": 64,
+      "room_id": 117,
+      "room": "OR-2",
+      "surgeon_id": 105,
+      "surgeon": "Dr. John Doe",
+      "surgery_type_id": 2,
+      "surgery_type": "Knee Replacement",
+      "start_time": "2025-06-01T10:00:00",
+      "end_time": "2025-06-01T12:30:00",
+      "duration_minutes": 150,
+      "patient_id": 108,
+      "patient_name": "Jane Smith",
+      "urgency_level": "Medium",
+      "status": "Scheduled"
+    },
+    {
+      "surgery_id": 65,
+      "room_id": 116,
+      "room": "OR-1",
+      "surgeon_id": 104,
+      "surgeon": "Dr. Emily Smith",
+      "surgery_type_id": 3,
+      "surgery_type": "Craniotomy",
+      "start_time": "2025-06-01T12:00:00",
+      "end_time": "2025-06-01T16:00:00",
+      "duration_minutes": 240,
+      "patient_id": 109,
+      "patient_name": "Alice Brown",
+      "urgency_level": "High",
+      "status": "Scheduled"
+    }
+  ],
+  "date": "2025-06-01",
+  "total_count": 3,
+  "status": "success"
+}

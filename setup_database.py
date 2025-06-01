@@ -11,6 +11,10 @@ import os
 import sys
 from sqlalchemy import inspect, create_engine, text
 from sqlalchemy.exc import SQLAlchemyError, OperationalError
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -27,7 +31,11 @@ def setup_mysql_database():
     """
     Set up a MySQL database by creating it if it doesn't exist.
     """
-    from db_config import DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME
+    DB_USER = os.getenv("DB_USER")
+    DB_PASSWORD = os.getenv("DB_PASSWORD")
+    DB_HOST = os.getenv("DB_HOST")
+    DB_PORT = os.getenv("DB_PORT")
+    DB_NAME = os.getenv("DB_NAME")
 
     if not all([DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME]):
         logger.error("MySQL connection parameters not set. Check your environment variables.")
@@ -56,10 +64,11 @@ def setup_database():
     """
     try:
         from db_config import engine, Base, DATABASE_URL
-        from models import *  # Import all models to ensure they're registered with Base
+        import models  # Import models to ensure they're registered with Base
+        #from models import *  # Import all models to ensure they're registered with Base
 
-        # If using MySQL, ensure the database exists
-        if "mysql" in DATABASE_URL:
+        # If using MySQL with individual parameters, ensure the database exists
+        if "mysql" in DATABASE_URL and not os.getenv("DATABASE_URL"):
             if not setup_mysql_database():
                 return False
 

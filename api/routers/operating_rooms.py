@@ -18,7 +18,7 @@ from services.operating_room_service import OperatingRoomService
 router = APIRouter()
 
 
-@router.post("/", response_model=OperatingRoomResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=OperatingRoomResponse, status_code=status.HTTP_201_CREATED)
 async def create_operating_room(
     operating_room: OperatingRoomCreate,
     db: Session = Depends(get_db),
@@ -35,7 +35,12 @@ async def create_operating_room(
     Returns:
         OperatingRoom: Created operating room
     """
-    db_operating_room = OperatingRoom(location=operating_room.location)
+    db_operating_room = OperatingRoom(
+        location=operating_room.location,
+        name=operating_room.name,  # Added name
+        status=operating_room.status,  # Added status
+        primary_service=operating_room.primary_service  # Added primary_service
+    )
 
     try:
         db.add(db_operating_room)
@@ -50,7 +55,7 @@ async def create_operating_room(
         )
 
 
-@router.get("/", response_model=List[OperatingRoomResponse])
+@router.get("", response_model=List[OperatingRoomResponse])
 async def read_operating_rooms(
     skip: int = 0,
     limit: int = 100,

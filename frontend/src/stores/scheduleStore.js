@@ -135,20 +135,27 @@ export const useScheduleStore = defineStore('schedule', {
         const targetDate = date || this.currentDateRange.start.toISOString().split('T')[0];
         const scheduleResponse = await scheduleAPI.getCurrentSchedule(targetDate);
 
-        // Transform backend data for frontend
-        this.scheduledSurgeries = scheduleResponse.surgeries.map(surgery => ({
-          id: surgery.surgery_id,
-          patientName: surgery.patient_name,
-          type: surgery.surgery_type,
-          surgeon: surgery.surgeon_name, // Assuming surgeon_name is available
-          surgeonId: surgery.surgeon_id, // Assuming surgeon_id is available for addSurgery
-          startTime: surgery.start_time,
-          endTime: surgery.end_time,
-          duration: surgery.duration_minutes,
-          operatingRoomId: surgery.operating_room_id,
-          status: surgery.status,
-          sdsTime: surgery.setup_time_minutes || 0
-        }));
+        // Add a check to ensure scheduleResponse and scheduleResponse.surgeries are valid
+        if (scheduleResponse && Array.isArray(scheduleResponse.surgeries)) {
+          this.scheduledSurgeries = scheduleResponse.surgeries.map(surgery => ({
+            id: surgery.surgery_id,
+            patientName: surgery.patient_name,
+            type: surgery.surgery_type,
+            surgeon: surgery.surgeon,
+            surgeonId: surgery.surgeon_id,
+            startTime: surgery.start_time,
+            endTime: surgery.end_time,
+            duration: surgery.duration_minutes,
+            operatingRoomId: surgery.room_id,
+            operatingRoom: surgery.room,
+            status: surgery.status,
+            urgencyLevel: surgery.urgency_level,
+            sdsTime: 0 // Will be calculated based on SDST rules
+          }));
+        } else {
+          console.warn('Received unexpected scheduleResponse format:', scheduleResponse);
+          this.scheduledSurgeries = []; // Ensure it's an empty array to prevent further errors
+        }
         // Update current date based on fetched schedule if needed, or keep as is
         // this.currentDateRange.start = new Date(scheduleResponse.date + 'T00:00:00Z');
         // this.currentDateRange.end = new Date(scheduleResponse.date + 'T23:59:59Z');
@@ -162,18 +169,20 @@ export const useScheduleStore = defineStore('schedule', {
         ]);
 
         this.operatingRooms = operatingRoomsData.map(room => ({
-          id: room.room_id,
-          name: `OR-${room.room_id}`,
+          id: room.room_id || room.id,
+          name: room.name,
           location: room.location,
-          status: 'Available' // Default status, or fetch real status
+          status: room.status,
+          primaryService: room.primary_service || room.primaryService
         }));
 
         this.staff = staffData.map(staffMember => ({
-          id: staffMember.staff_id,
+          id: staffMember.staff_id || staffMember.id,
           name: staffMember.name,
           role: staffMember.role,
-          specializations: staffMember.specialization ? [staffMember.specialization] : [],
-          status: 'Available' // Default status, or fetch real status
+          specializations: staffMember.specializations || [],
+          status: staffMember.status || 'Active',
+          availability: staffMember.availability
         }));
 
         this.equipment = equipmentData || [];

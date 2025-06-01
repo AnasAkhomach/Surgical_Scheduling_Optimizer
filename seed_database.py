@@ -11,7 +11,7 @@ from initialize_data import (
 )
 from models import OperatingRoom, Patient, Staff, Surgeon, SurgeryEquipment
 
-from datetime import date
+from datetime import date, timedelta
 
 # Example seed data for MySQL
 # This data is illustrative. Actual data comes from initialize_data functions.
@@ -40,14 +40,14 @@ staff_members_example = [
         name="Alice Brown",
         role="Nurse",
         contact_info="555-1111",
-        specialization="General",
+        specializations="General",
         availability=True,
     ),
     Staff(
         name="Bob White",
         role="Anesthetist",
         contact_info="555-2222",
-        specialization="Anesthesia",
+        specializations="Anesthesia",
         availability=True,
     ),
 ]
@@ -80,17 +80,20 @@ surgery_equipments_example = [
 def seed_initial_data(db_session):
     """Seeds the database with initial data using the provided session."""
     try:
-        # Add initial data using functions from initialize_data.py
-        # These functions should return lists of SQLAlchemy model instances.
+        # Add base entities first (no foreign key dependencies)
         db_session.add_all(initialize_operating_rooms_sqlalchemy())
         db_session.add_all(initialize_patients_sqlalchemy())
         db_session.add_all(initialize_staff_members_sqlalchemy())
         db_session.add_all(initialize_surgeons_sqlalchemy())
         db_session.add_all(initialize_surgery_equipments_sqlalchemy())
-        db_session.add_all(initialize_surgeries_sqlalchemy()) # Added surgery seeding
-        # Add other data sets as needed, e.g., surgeries, assignments, etc.
-        # Ensure corresponding initialize_..._sqlalchemy functions exist in initialize_data.py
 
+        # Commit base entities first so they get IDs assigned
+        db_session.commit()
+
+        # Now add surgeries which depend on the above entities
+        db_session.add_all(initialize_surgeries_sqlalchemy())
+
+        # Final commit for dependent entities
         db_session.commit()
         # print("Seed data inserted successfully using provided session.") # Logging can be handled by caller
     except Exception as e:

@@ -7,6 +7,7 @@ This module provides utilities for authentication and authorization.
 import os
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
+from dotenv import load_dotenv
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -17,6 +18,9 @@ from sqlalchemy.orm import Session
 from db_config import get_db
 from api.models import TokenData
 from models import User
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configure password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

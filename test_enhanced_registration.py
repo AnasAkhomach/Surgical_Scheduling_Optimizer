@@ -22,9 +22,9 @@ def test_enhanced_registration():
     """Test the enhanced registration endpoint with full data"""
     print('Testing enhanced registration endpoint...')
     user_data = generate_test_user()
-    
+
     try:
-        response = requests.post('http://localhost:8000/api/auth/register', 
+        response = requests.post('http://localhost:5001/api/auth/register',
                                json=user_data)
         print(f'Registration status: {response.status_code}')
         if response.status_code == 201:
@@ -47,10 +47,10 @@ def test_login_with_new_user(user_data):
     print(f'\nTesting login with new user: {user_data["username"]}...')
     try:
         data = urlencode({
-            'username': user_data['username'], 
+            'username': user_data['username'],
             'password': user_data['password']
         })
-        response = requests.post('http://localhost:8000/api/auth/token',
+        response = requests.post('http://localhost:5001/api/auth/token',
                                data=data,
                                headers={'Content-Type': 'application/x-www-form-urlencoded'})
         print(f'Login status: {response.status_code}')
@@ -70,7 +70,7 @@ def test_user_info(token):
     """Test the /auth/me endpoint"""
     print('\nTesting /auth/me endpoint...')
     try:
-        response = requests.get('http://localhost:8000/api/auth/me',
+        response = requests.get('http://localhost:5001/api/auth/me',
                               headers={'Authorization': f'Bearer {token}'})
         print(f'Auth/me status: {response.status_code}')
         if response.status_code == 200:
@@ -93,11 +93,11 @@ def test_user_info(token):
 def test_validation_errors():
     """Test validation error handling"""
     print('\nTesting validation error handling...')
-    
+
     # Test with invalid email
     print('Testing invalid email...')
     try:
-        response = requests.post('http://localhost:8000/api/auth/register', 
+        response = requests.post('http://localhost:5001/api/auth/register',
                                json={
                                    'username': 'testuser999',
                                    'email': 'invalid-email',
@@ -115,7 +115,7 @@ def test_validation_errors():
     # Test with missing required fields
     print('Testing missing required fields...')
     try:
-        response = requests.post('http://localhost:8000/api/auth/register', 
+        response = requests.post('http://localhost:5001/api/auth/register',
                                json={
                                    'username': 'testuser999'
                                    # Missing email and password
@@ -132,16 +132,16 @@ def test_duplicate_user():
     """Test duplicate user handling"""
     print('\nTesting duplicate user handling...')
     user_data = generate_test_user()
-    
+
     # Create user first time
     try:
-        response1 = requests.post('http://localhost:8000/api/auth/register', 
+        response1 = requests.post('http://localhost:5001/api/auth/register',
                                 json=user_data)
         if response1.status_code == 201:
             print('✅ First user creation successful')
-            
+
             # Try to create same user again
-            response2 = requests.post('http://localhost:8000/api/auth/register', 
+            response2 = requests.post('http://localhost:5001/api/auth/register',
                                     json=user_data)
             print(f'Duplicate user status: {response2.status_code}')
             if response2.status_code == 400:
@@ -158,24 +158,24 @@ def test_duplicate_user():
 def main():
     """Run all enhanced registration tests"""
     print("=== Enhanced Registration Tests ===\n")
-    
+
     # Test 1: Enhanced registration
     user_data = test_enhanced_registration()
-    
+
     if user_data:
         # Test 2: Login with new user
         token = test_login_with_new_user(user_data)
-        
+
         if token:
             # Test 3: Get user info
             test_user_info(token)
-    
+
     # Test 4: Validation errors
     test_validation_errors()
-    
+
     # Test 5: Duplicate user handling
     test_duplicate_user()
-    
+
     print("\n=== Enhanced Registration Tests Complete ===")
 
 if __name__ == "__main__":

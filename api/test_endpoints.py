@@ -35,109 +35,16 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 # Create test tables
 Base.metadata.create_all(bind=engine)
 
-# Create tables explicitly
-metadata = MetaData()
-
-# Create OperatingRoom table
-operating_room_table = Table(
-    'operatingroom', metadata,
-    Column('room_id', Integer, primary_key=True),
-    Column('location', String(255), nullable=False)
-)
-
-# Create Surgery table
-surgery_table = Table(
-    'surgery', metadata,
-    Column('surgery_id', Integer, primary_key=True),
-    Column('scheduled_date', DateTime),
-    Column('surgery_type_id', Integer),
-    Column('urgency_level', String(50)),
-    Column('duration_minutes', Integer),
-    Column('status', String(50)),
-    Column('start_time', DateTime),
-    Column('end_time', DateTime),
-    Column('patient_id', Integer),
-    Column('surgeon_id', Integer),
-    Column('room_id', Integer, ForeignKey('operatingroom.room_id'))
-)
-
-# Create OperatingRoomEquipment table
-operating_room_equipment_table = Table(
-    'operatingroomequipment', metadata,
-    Column('id', Integer, primary_key=True),
-    Column('room_id', Integer, ForeignKey('operatingroom.room_id')),
-    Column('equipment_name', String(255))
-)
-
-# Create User table
-user_table = Table(
-    'user', metadata,
-    Column('user_id', Integer, primary_key=True),
-    Column('username', String(50), unique=True, nullable=False),
-    Column('email', String(100), unique=True, nullable=False),
-    Column('hashed_password', String(100), nullable=False),
-    Column('full_name', String(100)),
-    Column('role', String(20)),
-    Column('staff_id', Integer),
-    Column('is_active', Integer, default=1),
-    Column('created_at', DateTime, default=datetime.now()),
-    Column('last_login', DateTime)
-)
-
-# Create Patient table
-patient_table = Table(
-    'patient', metadata,
-    Column('patient_id', Integer, primary_key=True),
-    Column('name', String(100), nullable=False),
-    Column('dob', String(10)),
-    Column('contact_info', String(100)),
-    Column('privacy_consent', Integer, default=1)
-)
-
-# Create Surgeon table
-surgeon_table = Table(
-    'surgeon', metadata,
-    Column('surgeon_id', Integer, primary_key=True),
-    Column('name', String(100), nullable=False),
-    Column('contact_info', String(100)),
-    Column('specialization', String(100)),
-    Column('credentials', String(100)),
-    Column('availability', Integer, default=1)
-)
-
-# Create Staff table
-staff_table = Table(
-    'staff', metadata,
-    Column('staff_id', Integer, primary_key=True),
-    Column('name', String(100), nullable=False),
-    Column('role', String(50)),
-    Column('contact_info', String(100)),
-    Column('specialization', String(100)),
-    Column('availability', Integer, default=1)
-)
-
-# Create SurgeryType table
-surgery_type_table = Table(
-    'surgerytype', metadata,
-    Column('type_id', Integer, primary_key=True),
-    Column('name', String(100), nullable=False),
-    Column('description', String(255)),
-    Column('typical_duration', Integer)
-)
-
-# Create SurgeryAppointment table
-appointment_table = Table(
-    'surgeryappointment', metadata,
-    Column('appointment_id', Integer, primary_key=True),
-    Column('patient_id', Integer, ForeignKey('patient.patient_id')),
-    Column('surgeon_id', Integer, ForeignKey('surgeon.surgeon_id')),
-    Column('room_id', Integer, ForeignKey('operatingroom.room_id')),
-    Column('appointment_date', DateTime),
-    Column('status', String(50)),
-    Column('notes', String(255))
-)
-
-metadata.create_all(bind=engine)
+# Assign table objects from Base.metadata
+operating_room_table = Base.metadata.tables['operatingroom']
+surgery_table = Base.metadata.tables['surgery']
+operating_room_equipment_table = Base.metadata.tables['operatingroomequipment']
+user_table = Base.metadata.tables['user']
+patient_table = Base.metadata.tables['patient']
+surgeon_table = Base.metadata.tables['surgeon']
+staff_table = Base.metadata.tables['staff']
+surgery_type_table = Base.metadata.tables['surgerytype']
+appointment_table = Base.metadata.tables['surgeryappointment']
 
 
 # Mock current user for testing
@@ -217,7 +124,12 @@ def seed_test_data(db):
 
     # Create test operating rooms
     for i in range(1, 4):
-        room = OperatingRoom(location=f"Test Room")
+        room = OperatingRoom(
+            name=f"Test Room {i}",
+            location=f"Location {i}",
+            status="Active",
+            primary_service=f"Service {i}"
+        )
         db.add(room)
 
     # Create test surgeons
@@ -242,15 +154,19 @@ def seed_test_data(db):
         db.add(patient)
 
     # Create test staff
+    import json # Ensure json is imported if not already at the top
     for i in range(1, 4):
-        staff = Staff(
+        staff_member = Staff(
             name=f"Staff {i}",
             role=f"Role {i}",
             contact_info=f"staff{i}@example.com",
-            specialization=f"Specialization {i}",
+            specializations=json.dumps([f"Skill {j}" for j in range(1, i + 1)]), # Example: ["Skill 1"], ["Skill 1", "Skill 2"], ...
+            status="Active",
             availability=True
         )
-        db.add(staff)
+        db.add(staff_member)
+        # print(f"Seeding staff: {staff_member.name}, specializations: {staff_member.specializations}") # For debugging seed data
+    db.flush() # Ensure IDs are populated if needed immediately after seeding within the same session block for other entities
 
     # Create test surgery types
     for i in range(1, 4):
@@ -317,11 +233,14 @@ def test_create_operating_room(db):
     """Test create operating room endpoint."""
     response = client.post(
         "/api/operating-rooms/",
-        json={"location": "New Test Room"}
+        json={"name": "New OR", "location": "New Location", "status": "Active", "primary_service": "General Surgery"}
     )
     assert response.status_code == 201
     data = response.json()
-    assert data["location"] == "New Test Room"
+    assert data["name"] == "New OR"
+    assert data["location"] == "New Location"
+    assert data["status"] == "Active"
+    assert data["primary_service"] == "General Surgery"
     assert "room_id" in data
 
 
@@ -331,7 +250,9 @@ def test_read_operating_rooms(db):
     assert response.status_code == 200
     data = response.json()
     assert len(data) >= 3
-    assert data[0]["location"] == "Test Room"
+    assert data[0]["name"] == "Test Room 1"
+    assert data[0]["location"] == "Location 1"
+    assert data[0]["status"] == "Active"
 
 
 def test_read_operating_room(db):
@@ -339,7 +260,10 @@ def test_read_operating_room(db):
     response = client.get("/api/operating-rooms/1")
     assert response.status_code == 200
     data = response.json()
-    assert data["location"] == "Test Room"
+    # Assuming seed data creates Test Room 1 with ID 1
+    assert data["name"] == "Test Room 1"
+    assert data["location"] == "Location 1"
+    assert data["status"] == "Active"
     assert data["room_id"] == 1
 
 
@@ -347,11 +271,14 @@ def test_update_operating_room(db):
     """Test update operating room endpoint."""
     response = client.put(
         "/api/operating-rooms/1",
-        json={"location": "Updated Test Room"}
+        json={"name": "Updated OR Name", "location": "Updated Location", "status": "Maintenance", "primary_service": "Cardiology"}
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["location"] == "Updated Test Room"
+    assert data["name"] == "Updated OR Name"
+    assert data["location"] == "Updated Location"
+    assert data["status"] == "Maintenance"
+    assert data["primary_service"] == "Cardiology"
     assert data["room_id"] == 1
 
 
@@ -513,6 +440,82 @@ def test_filter_surgeries_by_surgeon(db):
     else:
         # Skip this test if we couldn't create a surgeon
         pytest.skip("Could not create surgeon for testing")
+
+
+# Test Staff endpoints
+def test_create_staff(db):
+    """Test create staff endpoint."""
+    import json # For loading specializations in assertion
+    staff_data = {
+        "name": "New Nurse",
+        "role": "RN",
+        "contact_info": "nurse@hospital.com",
+        "specializations": ["Pediatrics", "Emergency"],
+        "status": "Active",
+        "availability": True
+    }
+    response = client.post("/api/staff/", json=staff_data)
+    assert response.status_code == 201, response.text
+    data = response.json()
+    assert data["name"] == staff_data["name"]
+    assert data["role"] == staff_data["role"]
+    assert data["status"] == staff_data["status"]
+    # Specializations are returned as a list by the Pydantic model with the validator
+    assert data["specializations"] == staff_data["specializations"]
+    assert "staff_id" in data
+
+def test_read_staff_list(db):
+    """Test read staff list endpoint."""
+    response = client.get("/api/staff/")
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert len(data) >= 3 # Based on seed data
+    # Check one staff member's details, assuming Staff 1 is the first in the list
+    assert data[0]["name"] == "Staff 1"
+    assert data[0]["role"] == "Role 1"
+    assert data[0]["status"] == "Active"
+    # Seeded Staff 1 has ["Skill 1"]
+    assert data[0]["specializations"] == ["Skill 1"]
+
+def test_read_staff_member(db):
+    """Test read a single staff member endpoint."""
+    # Assuming staff with ID 1 exists from seeding
+    response = client.get("/api/staff/1")
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["name"] == "Staff 1"
+    assert data["staff_id"] == 1
+    assert data["specializations"] == ["Skill 1"]
+    assert data["status"] == "Active"
+
+def test_update_staff(db):
+    """Test update staff endpoint."""
+    update_data = {
+        "name": "Updated Staff Name",
+        "role": "Senior RN",
+        "contact_info": "updated_nurse@hospital.com",
+        "specializations": ["Trauma"],
+        "status": "On Leave",
+        "availability": False
+    }
+    response = client.put("/api/staff/1", json=update_data)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["name"] == update_data["name"]
+    assert data["role"] == update_data["role"]
+    assert data["status"] == update_data["status"]
+    assert data["specializations"] == update_data["specializations"]
+    assert data["availability"] == update_data["availability"]
+    assert data["staff_id"] == 1
+
+def test_delete_staff(db):
+    """Test delete staff endpoint."""
+    response = client.delete("/api/staff/1")
+    assert response.status_code == 204, response.text
+
+    # Verify it's deleted
+    response = client.get("/api/staff/1")
+    assert response.status_code == 404, response.text
 
 
 # Test schedule endpoints

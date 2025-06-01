@@ -7,6 +7,7 @@ This module provides a RESTful API for the surgery scheduling application.
 import os
 import logging
 import sys
+import time
 from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -17,7 +18,7 @@ from pydantic import ValidationError
 from dotenv import load_dotenv
 
 # Add parent directory to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))) # Add project root to Python path
 
 # Import database configuration
 from db_config import get_db, init_db
@@ -116,10 +117,34 @@ async def integrity_error_handler(request: Request, exc: IntegrityError):
 async def startup_db_client():
     """Initialize database on startup."""
     try:
+        logger.info("Starting database initialization...")
         init_db()
         logger.info("Database initialized successfully")
     except Exception as e:
         logger.error(f"Error initializing database: {e}")
+        logger.error(f"Exception type: {type(e).__name__}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        raise
+
+# Add request/response logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log all incoming requests and responses."""
+    start_time = time.time()
+    logger.info(f"Incoming request: {request.method} {request.url}")
+
+    try:
+        response = await call_next(request)
+        process_time = time.time() - start_time
+        logger.info(f"Request completed: {request.method} {request.url} - Status: {response.status_code} - Time: {process_time:.4f}s")
+        return response
+    except Exception as e:
+        process_time = time.time() - start_time
+        logger.error(f"Request failed: {request.method} {request.url} - Error: {e} - Time: {process_time:.4f}s")
+        logger.error(f"Exception type: {type(e).__name__}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise
 
 # Include routers
@@ -131,8 +156,12 @@ app.include_router(surgeons.router, prefix="/api/surgeons", tags=["Surgeons"])
 app.include_router(patients.router, prefix="/api/patients", tags=["Patients"])
 app.include_router(staff.router, prefix="/api/staff", tags=["Staff"])
 app.include_router(appointments.router, prefix="/api/appointments", tags=["Appointments"])
-app.include_router(schedules.router, prefix="/api", tags=["schedules"])
+app.include_router(schedules.router, prefix="/api/schedules", tags=["schedules"])
 app.include_router(equipment.router, prefix="/api", tags=["equipment"])
+# Note: The equipment router in `api/routers/equipment.py` has `prefix="/equipment"`
+# and `tags=["Equipment"]`. The prefix in `main.py` should ideally match this.
+# For now, I'm using the existing commented out line's prefix and tag for minimal change,
+# but this might need to be `prefix="/api/equipment"` or the router's prefix changed.
 app.include_router(surgery_types.router, prefix="/api/surgery-types", tags=["Surgery Types"])
 app.include_router(sdst.router, prefix="/api/sdst", tags=["SDST"])
 app.include_router(websockets.router, prefix="/api/ws", tags=["WebSockets"])
@@ -141,7 +170,3 @@ app.include_router(websockets.router, prefix="/api/ws", tags=["WebSockets"])
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy"}
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("api.main:app", host="0.0.0.0", port=8000, reload=True)

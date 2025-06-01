@@ -27,18 +27,6 @@ console.error = function(...args) {
   originalError.apply(console, args);
 };
 
-// Test app.provide directly
-try {
-  if (typeof app.provide === 'function') {
-    console.log('app.provide is a function on the app instance created by createApp.');
-    app.provide('myCustomTestProvide', 'testValueFromMainJs');
-    console.log('Successfully called app.provide directly in main.js.');
-  } else {
-    console.error('CRITICAL: app.provide is NOT a function on the app instance in main.js.', app);
-  }
-} catch (e) {
-  console.error('Error encountered while testing app.provide directly in main.js:', e);
-}
 
 
 // Cache busting utility
@@ -84,6 +72,19 @@ app.use(pinia); // Install Pinia BEFORE mounting
 app.use(router); // Use the router
 app.use(Toast); // Use vue-toastification
 app.use(ganttastic); // Use vue-ganttastic
+
+// Test app.provide directly
+try {
+  if (typeof app.provide === 'function') {
+    console.log('app.provide is a function on the app instance created by createApp.');
+    app.provide('myCustomTestProvide', 'testValueFromMainJs');
+    console.log('Successfully called app.provide directly in main.js.');
+  } else {
+    console.error('CRITICAL: app.provide is NOT a function on the app instance in main.js.', app);
+  }
+} catch (e) {
+  console.error('Error encountered while testing app.provide directly in main.js:', e);
+}
 
 
 app.mount('#app');

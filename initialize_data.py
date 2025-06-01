@@ -1,4 +1,4 @@
-from datetime import date, datetime # Added datetime for parsing
+from datetime import date, datetime, timedelta # Added datetime for parsing
 from models import Patient, Staff, Surgeon, OperatingRoom, SurgeryEquipment, Surgery # Added Surgery model
 
 
@@ -66,8 +66,29 @@ def initialize_staff_members_sqlalchemy():
         Staff(
             name="Jane Smith",
             role="Nurse",
-            specialization=None,
+            specializations=None,
             contact_info="555-0101, jane.smith@example.com",
+            availability=True,
+        ),
+        Staff(
+            name="Bob Wilson",
+            role="Anesthetist",
+            specializations="Anesthesia",
+            contact_info="555-0201, bob.wilson@example.com",
+            availability=True,
+        ),
+        Staff(
+            name="Carol Davis",
+            role="Surgical Technician",
+            specializations="General Surgery",
+            contact_info="555-0301, carol.davis@example.com",
+            availability=True,
+        ),
+        Staff(
+            name="David Brown",
+            role="Circulating Nurse",
+            specializations="OR Management",
+            contact_info="555-0401, david.brown@example.com",
             availability=True,
         ),
         # Add more Staff instances as needed
@@ -149,10 +170,12 @@ def initialize_operating_rooms():
 
 def initialize_operating_rooms_sqlalchemy():
     return [
-        OperatingRoom(location="Main Building - Room 101"), # ID will be auto-generated (1)
-        OperatingRoom(location="Main Building - Room 102"), # ID will be auto-generated (2)
-        OperatingRoom(location="West Wing - Room 201"),    # ID will be auto-generated (3)
-        OperatingRoom(location="East Wing - Room A"),      # ID will be auto-generated (4)
+        OperatingRoom(name="OR-1", location="Main Building - Room 101"), # ID will be auto-generated (1)
+        OperatingRoom(name="OR-2", location="Main Building - Room 102"), # ID will be auto-generated (2)
+        OperatingRoom(name="OR-3", location="West Wing - Room 201"),    # ID will be auto-generated (3)
+        OperatingRoom(name="OR-4", location="East Wing - Room A"),      # ID will be auto-generated (4)
+        OperatingRoom(name="OR-5", location="South Wing - Room B"),     # ID will be auto-generated (5)
+        OperatingRoom(name="OR-6", location="North Wing - Room C"),     # ID will be auto-generated (6)
     ]
 
 
@@ -174,14 +197,14 @@ def initialize_surgeries():
     ]
 
 def initialize_surgeries_sqlalchemy():
-    # First, we need to create surgery types
+    from datetime import datetime, timedelta
     from db_config import SessionLocal
 
-    # Create a session to check if surgery types exist
+    # Create a session to check if surgery types exist and get patient/surgeon IDs
     db = SessionLocal()
     try:
         # Check if we have surgery types
-        from models import SurgeryType
+        from models import SurgeryType, Patient, Surgeon
         surgery_types = db.query(SurgeryType).all()
 
         # If no surgery types exist, create them
@@ -203,14 +226,26 @@ def initialize_surgeries_sqlalchemy():
         # Create a mapping of surgery type names to IDs
         surgery_type_map = {st.name: st.type_id for st in surgery_types}
 
+        # Get actual patient and surgeon IDs from the database
+        patients = db.query(Patient).all()
+        surgeons = db.query(Surgeon).all()
+
+        if not patients or not surgeons:
+            # Return empty list if no patients or surgeons exist
+            return []
+
+        patient_ids = [p.patient_id for p in patients]
+        surgeon_ids = [s.surgeon_id for s in surgeons]
+
     finally:
         db.close()
 
-    # Define surgeries with surgery_type_id instead of surgery_type
-    return [
-        Surgery(
-            patient_id=1,
-            surgeon_id=1,
+    # Define surgeries using actual patient and surgeon IDs
+    surgeries = []
+    if len(patient_ids) >= 1 and len(surgeon_ids) >= 1:
+        surgeries.append(Surgery(
+            patient_id=patient_ids[0],
+            surgeon_id=surgeon_ids[0],
             surgery_type_id=surgery_type_map.get("Appendectomy", 1),
             scheduled_date=datetime.now().replace(hour=8, minute=0, second=0, microsecond=0),
             start_time=datetime.now().replace(hour=8, minute=0, second=0, microsecond=0),
@@ -218,10 +253,12 @@ def initialize_surgeries_sqlalchemy():
             duration_minutes=120,
             status="Scheduled",
             urgency_level="High"
-        ),
-        Surgery(
-            patient_id=2,
-            surgeon_id=2,
+        ))
+
+    if len(patient_ids) >= 2 and len(surgeon_ids) >= 2:
+        surgeries.append(Surgery(
+            patient_id=patient_ids[1],
+            surgeon_id=surgeon_ids[1],
             surgery_type_id=surgery_type_map.get("Knee Replacement", 2),
             scheduled_date=datetime.now().replace(hour=10, minute=30, second=0, microsecond=0),
             start_time=datetime.now().replace(hour=10, minute=30, second=0, microsecond=0),
@@ -229,96 +266,48 @@ def initialize_surgeries_sqlalchemy():
             duration_minutes=150,
             status="Scheduled",
             urgency_level="Medium"
-        ),
-        Surgery(
-            patient_id=3,
-            surgeon_id=3,
+        ))
+
+    if len(patient_ids) >= 3 and len(surgeon_ids) >= 1:
+        surgeries.append(Surgery(
+            patient_id=patient_ids[2],
+            surgeon_id=surgeon_ids[0],
             surgery_type_id=surgery_type_map.get("Craniotomy", 3),
-            scheduled_date=datetime.now().replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=1),
-            start_time=datetime.now().replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=1),
-            end_time=datetime.now().replace(hour=14, minute=0, second=0, microsecond=0) + timedelta(days=1),
-            duration_minutes=300,
-            status="Scheduled",
-            urgency_level="High"
-        ),
-        Surgery(
-            patient_id=1,
-            surgeon_id=1,
-            surgery_type_id=surgery_type_map.get("Coronary Bypass", 4),
-            scheduled_date=datetime.now().replace(hour=8, minute=0, second=0, microsecond=0) + timedelta(days=2),
-            start_time=datetime.now().replace(hour=8, minute=0, second=0, microsecond=0) + timedelta(days=2),
-            end_time=datetime.now().replace(hour=12, minute=0, second=0, microsecond=0) + timedelta(days=2),
+            scheduled_date=(datetime.now() + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0),
+            start_time=(datetime.now() + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0),
+            end_time=(datetime.now() + timedelta(days=1)).replace(hour=13, minute=0, second=0, microsecond=0),
             duration_minutes=240,
             status="Scheduled",
             urgency_level="High"
-        ),
-        Surgery(
-            patient_id=2,
-            surgeon_id=2,
-            surgery_type_id=surgery_type_map.get("Hip Arthroscopy", 5),
-            scheduled_date=datetime.now().replace(hour=13, minute=0, second=0, microsecond=0) + timedelta(days=3),
-            start_time=datetime.now().replace(hour=13, minute=0, second=0, microsecond=0) + timedelta(days=3),
-            end_time=datetime.now().replace(hour=15, minute=0, second=0, microsecond=0) + timedelta(days=3),
-            duration_minutes=120,
-            status="Scheduled",
-            urgency_level="Low"
-        ),
-        Surgery(
-            patient_id=3,
-            surgeon_id=1,
-            surgery_type_id=surgery_type_map.get("Appendectomy", 1),
-            scheduled_date=datetime.now().replace(hour=9, minute=0, second=0, microsecond=0),
-            start_time=datetime.now().replace(hour=9, minute=0, second=0, microsecond=0),
-            end_time=datetime.now().replace(hour=11, minute=0, second=0, microsecond=0),
-            duration_minutes=120,
-            status="Scheduled",
-            urgency_level="Medium"
-        ),
-        Surgery(
-            patient_id=1,
-            surgeon_id=2,
-            surgery_type_id=surgery_type_map.get("Knee Replacement", 2),
-            scheduled_date=datetime.now().replace(hour=14, minute=0, second=0, microsecond=0),
-            start_time=datetime.now().replace(hour=14, minute=0, second=0, microsecond=0),
-            end_time=datetime.now().replace(hour=16, minute=30, second=0, microsecond=0),
-            duration_minutes=150,
-            status="Scheduled",
-            urgency_level="High"
-        ),
-        Surgery(
-            patient_id=2,
-            surgeon_id=3,
-            surgery_type_id=surgery_type_map.get("Craniotomy", 3),
-            scheduled_date=datetime.now().replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1),
-            start_time=datetime.now().replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1),
-            end_time=datetime.now().replace(hour=15, minute=0, second=0, microsecond=0) + timedelta(days=1),
+        ))
+
+    if len(patient_ids) >= 1 and len(surgeon_ids) >= 2:
+        surgeries.append(Surgery(
+            patient_id=patient_ids[0],
+            surgeon_id=surgeon_ids[1],
+            surgery_type_id=surgery_type_map.get("Coronary Bypass", 4),
+            scheduled_date=(datetime.now() + timedelta(days=2)).replace(hour=7, minute=30, second=0, microsecond=0),
+            start_time=(datetime.now() + timedelta(days=2)).replace(hour=7, minute=30, second=0, microsecond=0),
+            end_time=(datetime.now() + timedelta(days=2)).replace(hour=12, minute=30, second=0, microsecond=0),
             duration_minutes=300,
             status="Scheduled",
-            urgency_level="Medium"
-        ),
-        Surgery(
-            patient_id=3,
-            surgeon_id=1,
-            surgery_type_id=surgery_type_map.get("Coronary Bypass", 4),
-            scheduled_date=datetime.now().replace(hour=11, minute=0, second=0, microsecond=0) + timedelta(days=2),
-            start_time=datetime.now().replace(hour=11, minute=0, second=0, microsecond=0) + timedelta(days=2),
-            end_time=datetime.now().replace(hour=15, minute=0, second=0, microsecond=0) + timedelta(days=2),
-            duration_minutes=240,
-            status="Scheduled",
-            urgency_level="Low"
-        ),
-        Surgery(
-            patient_id=1,
-            surgeon_id=2,
+            urgency_level="High"
+        ))
+
+    if len(patient_ids) >= 2 and len(surgeon_ids) >= 1:
+        surgeries.append(Surgery(
+            patient_id=patient_ids[1],
+            surgeon_id=surgeon_ids[0],
             surgery_type_id=surgery_type_map.get("Hip Arthroscopy", 5),
-            scheduled_date=datetime.now().replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=3),
-            start_time=datetime.now().replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=3),
-            end_time=datetime.now().replace(hour=11, minute=0, second=0, microsecond=0) + timedelta(days=3),
+            scheduled_date=(datetime.now() + timedelta(days=3)).replace(hour=14, minute=0, second=0, microsecond=0),
+            start_time=(datetime.now() + timedelta(days=3)).replace(hour=14, minute=0, second=0, microsecond=0),
+            end_time=(datetime.now() + timedelta(days=3)).replace(hour=16, minute=0, second=0, microsecond=0),
             duration_minutes=120,
             status="Scheduled",
-            urgency_level="High"
-        ),
-    ]
+            urgency_level="Low"
+        ))
+
+    return surgeries
 
 
 
@@ -336,7 +325,21 @@ def initialize_surgery_equipments():
 
 def initialize_surgery_equipments_sqlalchemy():
     return [
-        SurgeryEquipment(name="Scalpel", type="Tool", availability=True),
+        SurgeryEquipment(name="Scalpel", type="Cutting Tool", availability=True),
+        SurgeryEquipment(name="Forceps", type="Grasping Tool", availability=True),
+        SurgeryEquipment(name="Retractor", type="Holding Tool", availability=True),
+        SurgeryEquipment(name="Suction Device", type="Suction", availability=True),
+        SurgeryEquipment(name="Electrocautery Unit", type="Electrosurgical", availability=True),
+        SurgeryEquipment(name="Anesthesia Machine", type="Anesthesia", availability=True),
+        SurgeryEquipment(name="Patient Monitor", type="Monitoring", availability=True),
+        SurgeryEquipment(name="Surgical Lights", type="Lighting", availability=True),
+        SurgeryEquipment(name="Operating Table", type="Furniture", availability=True),
+        SurgeryEquipment(name="Defibrillator", type="Emergency", availability=True),
+        SurgeryEquipment(name="Ventilator", type="Respiratory", availability=True),
+        SurgeryEquipment(name="Ultrasound Machine", type="Imaging", availability=True),
+        SurgeryEquipment(name="Arthroscope", type="Endoscopic", availability=True),
+        SurgeryEquipment(name="Microscope", type="Optical", availability=True),
+        SurgeryEquipment(name="Laser Unit", type="Laser", availability=True),
         # Add more SurgeryEquipment instances as needed
     ]
 

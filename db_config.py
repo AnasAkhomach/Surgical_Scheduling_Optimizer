@@ -14,14 +14,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from dotenv import load_dotenv
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+# logging.basicConfig(level=logging.INFO) # Commented out to prevent double logging
 logger = logging.getLogger(__name__)
-
-# Load environment variables from .env file
-load_dotenv(override=True)
-logger.info(f"Environment variables loaded from .env file")
-logger.info(f"DATABASE_URL from env: {os.environ.get('DATABASE_URL')}")
-logger.info(f"SQLITE_URL from env: {os.environ.get('SQLITE_URL')}")
 
 # Determine database URL
 def get_database_url():

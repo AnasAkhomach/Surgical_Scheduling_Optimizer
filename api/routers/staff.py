@@ -4,14 +4,16 @@ Staff router for the FastAPI application.
 This module provides API endpoints for staff management.
 """
 
+import json # Added for specializations
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from db_config import get_db
-from models import Staff, User
-from api.models import StaffCreate, Staff as StaffResponse, StaffUpdate
+from models import Staff, User # SQLAlchemy model
+from api.models import StaffCreate, StaffUpdate # Pydantic models
+from api.models import Staff as StaffResponse # Pydantic response model
 from api.auth import get_current_active_user
 
 router = APIRouter()
@@ -38,10 +40,11 @@ async def create_staff(
         name=staff.name,
         role=staff.role,
         contact_info=staff.contact_info,
-        specialization=staff.specialization,
+        specializations=json.dumps(staff.specializations) if staff.specializations is not None else None, # Updated for specializations list
+        status=staff.status, # Added status
         availability=staff.availability
     )
-    
+
     try:
         db.add(db_staff)
         db.commit()
@@ -135,12 +138,19 @@ async def update_staff(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Staff member not found"
         )
-    
+
     # Update staff fields
-    update_data = staff.dict(exclude_unset=True)
+    update_data = staff.model_dump(exclude_unset=True) # Changed to model_dump for Pydantic v2
+    if 'specializations' in update_data and update_data['specializations'] is not None:
+        update_data['specializations'] = json.dumps(update_data['specializations'])
+    elif 'specializations' in update_data and update_data['specializations'] is None:
+        # Explicitly set to None if provided as None, otherwise it might be excluded by exclude_unset=True
+        # and not updated if the Pydantic model field has a default_factory=list
+        pass # Let setattr handle it if key is present
+
     for key, value in update_data.items():
         setattr(db_staff, key, value)
-    
+
     try:
         db.commit()
         db.refresh(db_staff)
@@ -176,7 +186,7 @@ async def delete_staff(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Staff member not found"
         )
-    
+
     db.delete(db_staff)
     db.commit()
     return None

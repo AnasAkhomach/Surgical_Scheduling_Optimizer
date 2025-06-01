@@ -20,7 +20,7 @@ from db_config import get_db, Base
 from api.main import app
 from api.auth import get_current_active_user
 from models import (
-    User, Surgery, OperatingRoom, Surgeon, Patient, SurgeryType, 
+    User, Surgery, OperatingRoom, Surgeon, Patient, SurgeryType,
     SurgeryRoomAssignment, ScheduleHistory
 )
 
@@ -61,34 +61,34 @@ client = TestClient(app)
 def db():
     Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
-    
+
     # Create test data
     # Surgery types
     surgery_type1 = SurgeryType(type_id=1, name="Appendectomy", description="Appendix removal", average_duration=90)
     surgery_type2 = SurgeryType(type_id=2, name="Gallbladder", description="Gallbladder surgery", average_duration=120)
-    
+
     # Operating rooms
-    room1 = OperatingRoom(room_id=1, location="OR-1")
-    room2 = OperatingRoom(room_id=2, location="OR-2")
-    
+    room1 = OperatingRoom(room_id=1, name="OR-1", location="Building A, Room 101", status="Active") # Added name and status
+    room2 = OperatingRoom(room_id=2, name="OR-2", location="Building B, Room 202", status="Active") # Added name and status
+
     # Surgeons
-    surgeon1 = Surgeon(surgeon_id=1, name="Dr. Smith", contact_info="smith@hospital.com", 
+    surgeon1 = Surgeon(surgeon_id=1, name="Dr. Smith", contact_info="smith@hospital.com",
                       specialization="General Surgery", credentials="MD, FACS")
     surgeon2 = Surgeon(surgeon_id=2, name="Dr. Jones", contact_info="jones@hospital.com",
                       specialization="General Surgery", credentials="MD, FACS")
-    
+
     # Patients
-    patient1 = Patient(patient_id=1, name="John Doe", dob=date(1980, 1, 1), 
+    patient1 = Patient(patient_id=1, name="John Doe", dob=date(1980, 1, 1),
                       contact_info="john@email.com", privacy_consent=True)
     patient2 = Patient(patient_id=2, name="Jane Smith", dob=date(1990, 1, 1),
                       contact_info="jane@email.com", privacy_consent=True)
-    
+
     # Add all test data
     db.add_all([surgery_type1, surgery_type2, room1, room2, surgeon1, surgeon2, patient1, patient2])
     db.commit()
-    
+
     yield db
-    
+
     db.close()
     Base.metadata.drop_all(bind=engine)
 
@@ -96,7 +96,7 @@ def db():
 def test_schedule_conflict_detection(db):
     """Test schedule conflict detection."""
     test_date = date.today()
-    
+
     # Create overlapping surgeries
     surgery1 = Surgery(
         surgery_id=1,
@@ -111,7 +111,7 @@ def test_schedule_conflict_detection(db):
         end_time=datetime.combine(test_date, datetime.min.time().replace(hour=10, minute=30)),
         status="Scheduled"
     )
-    
+
     surgery2 = Surgery(
         surgery_id=2,
         surgery_type_id=2,
@@ -125,20 +125,20 @@ def test_schedule_conflict_detection(db):
         end_time=datetime.combine(test_date, datetime.min.time().replace(hour=12)),
         status="Scheduled"
     )
-    
+
     db.add_all([surgery1, surgery2])
     db.commit()
-    
+
     # Test conflict detection
     response = client.get(f"/api/schedules/conflicts?schedule_date={test_date}")
     assert response.status_code == 200
-    
+
     data = response.json()
     assert data["is_valid"] == False
     assert data["total_conflicts"] > 0
     assert data["critical_conflicts"] > 0
     assert len(data["conflicts"]) > 0
-    
+
     # Check conflict details
     conflict = data["conflicts"][0]
     assert conflict["conflict_type"] == "surgeon_overlap"
@@ -148,7 +148,7 @@ def test_schedule_conflict_detection(db):
 def test_manual_schedule_adjustment(db):
     """Test manual schedule adjustment."""
     test_date = date.today()
-    
+
     # Create a surgery
     surgery = Surgery(
         surgery_id=1,
@@ -163,10 +163,10 @@ def test_manual_schedule_adjustment(db):
         end_time=datetime.combine(test_date, datetime.min.time().replace(hour=10, minute=30)),
         status="Scheduled"
     )
-    
+
     db.add(surgery)
     db.commit()
-    
+
     # Test manual adjustment
     adjustment_data = {
         "surgery_id": 1,
@@ -176,10 +176,10 @@ def test_manual_schedule_adjustment(db):
         "reason": "Patient request for afternoon slot",
         "force_override": False
     }
-    
+
     response = client.post("/api/schedules/adjust", json=adjustment_data)
     assert response.status_code == 200
-    
+
     data = response.json()
     assert data["success"] == True
     assert "Room changed" in str(data["changes_applied"])
@@ -189,7 +189,7 @@ def test_manual_schedule_adjustment(db):
 def test_schedule_comparison(db):
     """Test schedule comparison functionality."""
     test_date = date.today()
-    
+
     # Create current schedule
     current_schedule = [
         {
@@ -209,7 +209,7 @@ def test_schedule_comparison(db):
             "status": "Scheduled"
         }
     ]
-    
+
     # Create proposed schedule with changes
     proposed_schedule = [
         {
@@ -229,15 +229,15 @@ def test_schedule_comparison(db):
             "status": "Scheduled"
         }
     ]
-    
+
     comparison_data = {
         "current_schedule": current_schedule,
         "proposed_schedule": proposed_schedule
     }
-    
+
     response = client.post("/api/schedules/compare", json=comparison_data)
     assert response.status_code == 200
-    
+
     data = response.json()
     assert len(data["changes"]) > 0
     assert data["changes"][0]["change_type"] == "modified"
@@ -250,7 +250,7 @@ def test_schedule_comparison(db):
 def test_schedule_history(db):
     """Test schedule history tracking."""
     test_date = date.today()
-    
+
     # Create a schedule history entry
     history_entry = ScheduleHistory(
         schedule_date=test_date,
@@ -260,14 +260,14 @@ def test_schedule_history(db):
         affected_surgeries='[1, 2]',
         schedule_snapshot='[]'
     )
-    
+
     db.add(history_entry)
     db.commit()
-    
+
     # Test getting history
     response = client.get(f"/api/schedules/history?schedule_date={test_date}")
     assert response.status_code == 200
-    
+
     data = response.json()
     assert len(data) > 0
     assert data[0]["action_type"] == "manual_adjustment"
@@ -278,7 +278,7 @@ def test_schedule_history(db):
 def test_schedule_validation_with_no_conflicts(db):
     """Test schedule validation when there are no conflicts."""
     test_date = date.today()
-    
+
     # Create non-overlapping surgeries
     surgery1 = Surgery(
         surgery_id=1,
@@ -293,7 +293,7 @@ def test_schedule_validation_with_no_conflicts(db):
         end_time=datetime.combine(test_date, datetime.min.time().replace(hour=10, minute=30)),
         status="Scheduled"
     )
-    
+
     surgery2 = Surgery(
         surgery_id=2,
         surgery_type_id=2,
@@ -307,14 +307,14 @@ def test_schedule_validation_with_no_conflicts(db):
         end_time=datetime.combine(test_date, datetime.min.time().replace(hour=16)),
         status="Scheduled"
     )
-    
+
     db.add_all([surgery1, surgery2])
     db.commit()
-    
+
     # Test conflict detection
     response = client.get(f"/api/schedules/conflicts?schedule_date={test_date}")
     assert response.status_code == 200
-    
+
     data = response.json()
     assert data["is_valid"] == True
     assert data["total_conflicts"] == 0

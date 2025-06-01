@@ -73,15 +73,15 @@ def db():
     """Create a fresh database for each test."""
     # Create tables
     Base.metadata.create_all(bind=engine)
-    
+
     # Create a session
     db = TestingSessionLocal()
-    
+
     # Seed test data
     seed_test_data(db)
-    
+
     yield db
-    
+
     # Clean up
     db.close()
     Base.metadata.drop_all(bind=engine)
@@ -99,12 +99,12 @@ def seed_test_data(db):
         is_active=True
     )
     db.add(test_user)
-    
+
     # Create test operating rooms
     for i in range(1, 4):
-        room = OperatingRoom(location=f"Test Room {i}")
+        room = OperatingRoom(name=f"Test OR {i}", location=f"Test Room {i}", status="Active")
         db.add(room)
-    
+
     # Create test surgeons
     for i in range(1, 4):
         surgeon = Surgeon(
@@ -115,7 +115,7 @@ def seed_test_data(db):
             availability=True
         )
         db.add(surgeon)
-    
+
     # Create test patients
     for i in range(1, 6):
         patient = Patient(
@@ -125,18 +125,19 @@ def seed_test_data(db):
             privacy_consent=True
         )
         db.add(patient)
-    
+
     # Create test staff
     for i in range(1, 4):
         staff = Staff(
             name=f"Staff {i}",
             role=f"Role {i}",
             contact_info=f"staff{i}@example.com",
-            specialization=f"Specialization {i}",
-            availability=True
+            specializations=f'["Specialization {i}"]',  # Store as JSON string for SQLAlchemy
+            availability=True,
+            status="Active"
         )
         db.add(staff)
-    
+
     # Create test surgery types
     for i in range(1, 4):
         surgery_type = SurgeryType(
@@ -144,7 +145,7 @@ def seed_test_data(db):
             description=f"Description {i}"
         )
         db.add(surgery_type)
-    
+
     # Create test surgeries
     for i in range(1, 6):
         surgery = Surgery(
@@ -157,7 +158,7 @@ def seed_test_data(db):
             surgeon_id=i % 3 + 1
         )
         db.add(surgery)
-    
+
     db.commit()
 
 
@@ -237,7 +238,7 @@ def test_delete_operating_room(db):
     """Test delete operating room endpoint."""
     response = client.delete("/api/operating-rooms/1")
     assert response.status_code == 204
-    
+
     # Verify it's deleted
     response = client.get("/api/operating-rooms/1")
     assert response.status_code == 404

@@ -120,11 +120,11 @@ export const useResourceStore = defineStore('resource', {
 
         // Transform backend data to frontend format
         this.operatingRooms = response.map(room => ({
-          id: room.room_id,
-          name: `OR-${room.room_id}`,
+          id: room.room_id || room.id,
+          name: room.name,
           location: room.location,
-          status: 'Available', // Default status
-          primaryService: 'General' // Default service
+          status: room.status,
+          primaryService: room.primary_service || room.primaryService
         }));
 
         console.log('Operating rooms loaded successfully:', this.operatingRooms.length);
@@ -145,22 +145,25 @@ export const useResourceStore = defineStore('resource', {
 
       try {
         const payload = {
-          location: orData.location
+          name: orData.name,
+          location: orData.location,
+          status: orData.status || 'Active',
+          primaryService: orData.primaryService
         };
 
         const response = await operatingRoomAPI.createOperatingRoom(payload);
 
         const newRoom = {
-          id: response.room_id,
-          name: `OR-${response.room_id}`,
+          id: response.room_id || response.id,
+          name: response.name,
           location: response.location,
-          status: 'Available',
-          primaryService: orData.primaryService || 'General'
+          status: response.status,
+          primaryService: response.primary_service || response.primaryService
         };
 
         this.operatingRooms.push(newRoom);
 
-        console.log('Operating room added successfully:', response.room_id);
+        console.log('Operating room added successfully:', response.room_id || response.id);
         return { success: true, data: newRoom };
       } catch (error) {
         this.error = 'Failed to add operating room';
@@ -177,7 +180,10 @@ export const useResourceStore = defineStore('resource', {
 
       try {
         const payload = {
-          location: orData.location
+          name: orData.name,
+          location: orData.location,
+          status: orData.status,
+          primaryService: orData.primaryService
         };
 
         const response = await operatingRoomAPI.updateOperatingRoom(orId, payload);
@@ -186,11 +192,11 @@ export const useResourceStore = defineStore('resource', {
         const index = this.operatingRooms.findIndex(or => or.id === orId);
         if (index !== -1) {
           this.operatingRooms[index] = {
-            ...this.operatingRooms[index],
+            id: response.room_id || response.id,
+            name: response.name,
             location: response.location,
-            name: `OR-${response.room_id}`,
-            // Keep other frontend-specific fields
-            primaryService: orData.primaryService || this.operatingRooms[index].primaryService
+            status: response.status,
+            primaryService: response.primary_service || response.primaryService
           };
         }
 
@@ -233,16 +239,14 @@ export const useResourceStore = defineStore('resource', {
       try {
         const backendSurgeons = await surgeonAPI.getSurgeons();
         const transformedSurgeons = backendSurgeons.map(surgeon => ({
-          id: surgeon.surgeon_id.toString(), // Ensure ID is a string if components expect it
+          id: surgeon.surgeon_id || surgeon.id,
           name: surgeon.name,
           role: 'Surgeon',
-          // Backend specialization is a string, frontend expects an array.
-          // Split by comma if multiple, otherwise single item array.
           specializations: surgeon.specialization ? surgeon.specialization.split(',').map(s => s.trim()) : [],
-          status: 'Active', // Default status, backend model might have 'availability'
-          contact_info: surgeon.contact_info, // Keep original backend data if useful
-          credentials: surgeon.credentials, // Keep original backend data if useful
-          // availability: surgeon.availability // Consider how to map this to frontend 'status' or use directly
+          status: surgeon.availability ? 'Active' : 'Inactive',
+          contact_info: surgeon.contact_info,
+          credentials: surgeon.credentials,
+          availability: surgeon.availability
         }));
 
         // Filter out existing mock surgeons, keep other staff types
@@ -278,7 +282,7 @@ export const useResourceStore = defineStore('resource', {
         const response = await staffAPI.createStaff(payload);
 
         const newStaff = {
-          id: response.staff_id,
+          id: response.staff_id || response.id,
           name: response.name,
           role: response.role,
           specializations: response.specializations || [],
@@ -315,7 +319,7 @@ export const useResourceStore = defineStore('resource', {
         const index = this.staff.findIndex(s => s.id === staffId);
         if (index !== -1) {
           this.staff[index] = {
-            ...this.staff[index],
+            id: response.staff_id || response.id,
             name: response.name,
             role: response.role,
             specializations: response.specializations || [],
@@ -323,7 +327,7 @@ export const useResourceStore = defineStore('resource', {
           };
         }
 
-        console.log('Staff updated successfully:', response.staff_id);
+        console.log('Staff updated successfully:', response.staff_id || response.id);
         return { success: true, data: this.staff[index] };
       } catch (error) {
         this.error = 'Failed to update staff';
@@ -477,11 +481,11 @@ export const useResourceStore = defineStore('resource', {
         const response = await staffAPI.getStaff();
 
         this.staff = response.map(s => ({
-          id: s.staff_id,
+          id: s.staff_id || s.id,
           name: s.name,
           role: s.role,
           specializations: s.specializations || [],
-          status: s.status || 'Active' // Default status
+          status: s.status || 'Active'
         }));
 
         console.log('Staff loaded successfully:', this.staff.length);
